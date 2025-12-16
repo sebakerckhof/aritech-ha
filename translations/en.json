@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Aritech ATS Alarm System",
+        "description": "Enter the connection details for your Aritech ATS alarm panel.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "encryption_key": "Encryption Key (24 digits)",
+          "pin_code": "PIN Code"
+        },
+        "data_description": {
+          "encryption_key": "The 24-digit encryption key for your alarm panel",
+          "pin_code": "Your alarm panel PIN code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the alarm panel",
+      "invalid_auth": "Invalid PIN code",
+      "invalid_input": "Invalid configuration (check encryption key format)",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This alarm panel is already configured"
+    }
+  }
+}
