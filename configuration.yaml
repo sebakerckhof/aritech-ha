@@ -1,0 +1,10 @@
+# Home Assistant configuration for Aritech ATS development
+
+# Configure a default setup of Home Assistant
+default_config:
+
+# Enable logging
+logger:
+  default: info
+  logs:
+    custom_components.aritech_ats: debug
