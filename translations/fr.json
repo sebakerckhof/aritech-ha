@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion au système d'alarme Aritech ATS",
+        "description": "Entrez les informations de connexion pour votre centrale d'alarme Aritech ATS.",
+        "data": {
+          "host": "Hôte",
+          "port": "Port",
+          "encryption_key": "Clé de chiffrement (24 chiffres)",
+          "pin_code": "Code PIN"
+        },
+        "data_description": {
+          "encryption_key": "La clé de chiffrement à 24 chiffres de votre centrale d'alarme",
+          "pin_code": "Votre code PIN de la centrale d'alarme"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter à la centrale d'alarme",
+      "invalid_auth": "Code PIN invalide",
+      "invalid_input": "Configuration invalide (vérifiez le format de la clé de chiffrement)",
+      "unknown": "Erreur inattendue"
+    },
+    "abort": {
+      "already_configured": "Cette centrale d'alarme est déjà configurée"
+    }
+  }
+}

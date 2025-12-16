@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbinden met Aritech ATS alarmsysteem",
+        "description": "Voer de verbindingsgegevens in voor uw Aritech ATS alarmcentrale.",
+        "data": {
+          "host": "Host",
+          "port": "Poort",
+          "encryption_key": "Encryptiesleutel (24 cijfers)",
+          "pin_code": "PIN-code"
+        },
+        "data_description": {
+          "encryption_key": "De 24-cijferige encryptiesleutel van uw alarmcentrale",
+          "pin_code": "Uw PIN-code van de alarmcentrale"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met de alarmcentrale",
+      "invalid_auth": "Ongeldige PIN-code",
+      "invalid_input": "Ongeldige configuratie (controleer het formaat van de encryptiesleutel)",
+      "unknown": "Onverwachte fout"
+    },
+    "abort": {
+      "already_configured": "Deze alarmcentrale is al geconfigureerd"
+    }
+  }
+}

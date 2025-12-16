@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbindung zum Aritech ATS Alarmsystem",
+        "description": "Geben Sie die Verbindungsdaten für Ihre Aritech ATS Alarmanlage ein.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "encryption_key": "Verschlüsselungsschlüssel (24 Ziffern)",
+          "pin_code": "PIN-Code"
+        },
+        "data_description": {
+          "encryption_key": "Der 24-stellige Verschlüsselungsschlüssel für Ihre Alarmanlage",
+          "pin_code": "Ihr PIN-Code für die Alarmanlage"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zur Alarmanlage fehlgeschlagen",
+      "invalid_auth": "Ungültiger PIN-Code",
+      "invalid_input": "Ungültige Konfiguration (Verschlüsselungsschlüssel-Format prüfen)",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "abort": {
+      "already_configured": "Diese Alarmanlage ist bereits konfiguriert"
+    }
+  }
+}
