@@ -67,6 +67,11 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         self._connected = False
         self._reconnect_task: asyncio.Task | None = None
 
+        # Reconnection backoff settings
+        self._reconnect_attempt: int = 0
+        self._reconnect_delays: list[int] = [5, 10, 20, 40, 60, 120]  # Exponential backoff delays in seconds
+        self._max_reconnect_attempts: int = 20  # Max attempts before longer pause
+
         # Callbacks for entity updates
         self._area_callbacks: dict[int, list[callable]] = {}
         self._zone_callbacks: dict[int, list[callable]] = {}
@@ -279,6 +284,14 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             # Schedule reconnection
             self._schedule_reconnect()
 
+        # Register client connection lost callback
+        if self._client:
+            @self._client.on_connection_lost
+            def handle_connection_lost() -> None:
+                """Handle client connection lost (e.g., keep-alive failures)."""
+                _LOGGER.warning("Aritech client connection lost detected")
+                self._schedule_reconnect()
+
     @callback
     def _notify_callbacks(self, callbacks: dict[int, list[callable]], entity_id: int) -> None:
         """Notify callbacks for a specific entity."""
@@ -333,22 +346,50 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         
         return unregister
 
+    def _get_reconnect_delay(self) -> int:
+        """Get the delay for the current reconnection attempt using exponential backoff."""
+        if self._reconnect_attempt >= len(self._reconnect_delays):
+            return self._reconnect_delays[-1]  # Use max delay
+        return self._reconnect_delays[self._reconnect_attempt]
+
     def _schedule_reconnect(self) -> None:
-        """Schedule a reconnection attempt."""
+        """Schedule a reconnection attempt with exponential backoff."""
         if self._reconnect_task and not self._reconnect_task.done():
             return  # Already scheduled
 
+        delay = self._get_reconnect_delay()
+        self._reconnect_attempt += 1
+
         async def reconnect() -> None:
             """Attempt to reconnect."""
-            _LOGGER.info("Attempting to reconnect to Aritech panel...")
-            await asyncio.sleep(30)  # Wait before reconnecting
-            
+            _LOGGER.info(
+                "Attempting to reconnect to Aritech panel in %d seconds (attempt %d)...",
+                delay,
+                self._reconnect_attempt,
+            )
+            await asyncio.sleep(delay)
+
             try:
                 await self.async_disconnect()
                 await self.async_connect()
-                _LOGGER.info("Reconnected to Aritech panel successfully")
+                _LOGGER.info(
+                    "Reconnected to Aritech panel successfully after %d attempts",
+                    self._reconnect_attempt,
+                )
+                # Reset attempt counter on successful reconnection
+                self._reconnect_attempt = 0
             except Exception as err:
-                _LOGGER.error("Reconnection failed: %s", err)
+                _LOGGER.error(
+                    "Reconnection failed (attempt %d): %s",
+                    self._reconnect_attempt,
+                    err,
+                )
+                if self._reconnect_attempt >= self._max_reconnect_attempts:
+                    _LOGGER.warning(
+                        "Max reconnection attempts (%d) reached. Will continue retrying with max delay (%ds).",
+                        self._max_reconnect_attempts,
+                        self._reconnect_delays[-1],
+                    )
                 self._schedule_reconnect()
 
         self._reconnect_task = self.hass.async_create_task(reconnect())

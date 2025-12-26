@@ -6,7 +6,7 @@
   "documentation": "https://github.com/seba/aritech-ats-integration",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "requirements": ["aritech-client>=0.2.1"],
-  "version": "0.1.0",
+  "requirements": ["aritech-client>=0.2.2"],
+  "version": "0.1.1",
   "loggers": ["aritech_client"]
 }
