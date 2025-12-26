@@ -2,6 +2,16 @@
 
 A custom Home Assistant integration for Aritech ATS alarm panels, providing real-time monitoring and control of your security system.
 
+## Supported Panels
+
+| Panel Series | Status | Notes |
+|--------------|--------|-------|
+| ATS x500 | Supported | |
+| ATS x700 | In Development | Coming soon |
+| ATS x000 | Not Supported | Uses a different protocol |
+
+The Classic 1000 series panels use a legacy protocol that is fundamentally different from the x500/x700 series, and there are no plans to support them. But we're open to PR's if you want to add support.
+
 ## Features
 
 ### Alarm Control Panel
