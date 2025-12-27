@@ -115,7 +115,7 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             "host": config[CONF_HOST],
             "port": config[CONF_PORT],
             "pin": config[CONF_PIN_CODE],
-            "encryption_password": config[CONF_ENCRYPTION_KEY],
+            "encryption_key": config[CONF_ENCRYPTION_KEY],
         })
 
         try:
