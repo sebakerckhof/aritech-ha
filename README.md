@@ -1,13 +1,13 @@
-# Aritech ATS Integration for Home Assistant
+# Aritech Integration for Home Assistant
 
-A custom Home Assistant integration for Aritech ATS alarm panels, providing real-time monitoring and control of your security system.
+A custom Home Assistant integration for Aritech alarm panels, providing real-time monitoring and control of your security system.
 
 ## Supported Panels
 
 | Panel Series | Status | Notes |
 |--------------|--------|-------|
 | ATS x500 | Supported | Tested with x500 firmware 4.1, 4.8 and 4.11 |
-| ATS x700 |Supported | Tested with x700 firmware 4.1 |
+| ATS x700 (everon) |Supported | Tested with x700 firmware 4.1 |
 | ATS x000 | Not Supported | Uses a different protocol |
 
 The Classic 1000 series panels use a legacy protocol that is fundamentally different from the x500/x700 series, and there are no plans to support them. But we're open to PR's if you want to add support.
@@ -60,7 +60,7 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 ## Requirements
 
 - Home Assistant 2024.1 or newer
-- Aritech ATS panel with network connectivity (IP module)
+- Aritech panel with network connectivity (IP module)
 - `aritech-client` Python library (v0.4.0+)
 - Panel encryption key and PIN code (x500) or username/password (x700)
 
@@ -71,7 +71,7 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 1. Open HACS in Home Assistant
 2. Click the three dots menu and select "Custom repositories"
 3. Add the repository URL and select "Integration" as the category
-4. Search for "Aritech ATS" and install
+4. Search for "Aritech" and install
 5. Restart Home Assistant
 
 ### Manual Installation
@@ -83,7 +83,7 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 
 1. Go to **Settings** > **Devices & Services**
 2. Click **+ Add Integration**
-3. Search for "Aritech ATS"
+3. Search for "Aritech"
 4. Enter your panel's connection details (host, port, encryption key)
 5. The integration will auto-detect your panel type:
    - **x500 panels**: Enter your PIN code
@@ -103,7 +103,7 @@ After setup, the integration creates:
 
 ## Arming Modes
 
-| Home Assistant | ATS Panel |
+| Home Assistant | Aritech mode |
 |----------------|-----------|
 | Arm Away | Full Set |
 | Arm Home | Part Set 1 |
