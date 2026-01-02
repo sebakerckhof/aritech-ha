@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "连接到 Aritech ATS 报警系统",
-        "description": "输入您的 Aritech ATS 报警面板的连接信息。",
+        "title": "连接到 Aritech 报警系统",
+        "description": "输入您的 Aritech 报警面板的连接信息。",
         "data": {
           "host": "主机",
           "port": "端口",

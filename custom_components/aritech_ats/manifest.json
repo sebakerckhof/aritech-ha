@@ -1,12 +1,12 @@
 {
   "domain": "aritech_ats",
-  "name": "Aritech ATS",
+  "name": "Aritech",
   "codeowners": ["@seba"],
   "config_flow": true,
   "documentation": "https://github.com/seba/aritech-ats-integration",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "requirements": ["aritech-client>=0.2.3"],
-  "version": "0.1.2",
+  "requirements": ["aritech-client>=0.4.0"],
+  "version": "0.4.0",
   "loggers": ["aritech_client"]
 }

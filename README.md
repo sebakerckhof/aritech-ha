@@ -6,8 +6,8 @@ A custom Home Assistant integration for Aritech ATS alarm panels, providing real
 
 | Panel Series | Status | Notes |
 |--------------|--------|-------|
-| ATS x500 | Supported | |
-| ATS x700 | In Development | Coming soon |
+| ATS x500 | Supported | Tested with x500 firmware 4.1, 4.8 and 4.11 |
+| ATS x700 |Supported | Tested with x700 firmware 4.1 |
 | ATS x000 | Not Supported | Uses a different protocol |
 
 The Classic 1000 series panels use a legacy protocol that is fundamentally different from the x500/x700 series, and there are no plans to support them. But we're open to PR's if you want to add support.
@@ -44,13 +44,25 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 - Output control
 - Trigger activation
 - Force arm toggle per area
+- Door lock/unlock (ON = unlocked)
+- Door enable/disable (ON = enabled)
+
+### Buttons
+- Door unlock (standard time) - momentary unlock for configured duration
+
+### Doors
+- Lock state binary sensor
+- Open/closed binary sensor
+- Forced open detection
+- Open too long detection
+- Reader tamper detection
 
 ## Requirements
 
 - Home Assistant 2024.1 or newer
 - Aritech ATS panel with network connectivity (IP module)
-- `aritech-client` Python library (v0.2.1+)
-- Panel encryption key and PIN code
+- `aritech-client` Python library (v0.4.0+)
+- Panel encryption key and PIN code (x500) or username/password (x700)
 
 ## Installation
 
@@ -72,11 +84,10 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 1. Go to **Settings** > **Devices & Services**
 2. Click **+ Add Integration**
 3. Search for "Aritech ATS"
-4. Enter the following:
-   - **Host**: IP address of your ATS panel
-   - **Port**: Communication port (default: 32000)
-   - **Encryption Key**: 24-digit encryption key configured on the panel
-   - **PIN Code**: User PIN for authentication
+4. Enter your panel's connection details (host, port, encryption key)
+5. The integration will auto-detect your panel type:
+   - **x500 panels**: Enter your PIN code
+   - **x700 panels**: Enter your username and password
 
 ## Entities
 
@@ -85,9 +96,10 @@ After setup, the integration creates:
 | Entity Type | Description |
 |-------------|-------------|
 | `alarm_control_panel` | One per area - arm/disarm control |
-| `binary_sensor` | Zone states (active, tamper, fault, alarm, isolated) and area alerts |
+| `binary_sensor` | Zone states (active, tamper, fault, alarm, isolated), area alerts, door states |
 | `sensor` | Panel info, connection status, area/zone state text |
-| `switch` | Zone inhibit, outputs, triggers, force arm |
+| `switch` | Zone inhibit, outputs, triggers, force arm, door lock/unlock, door enable |
+| `button` | Door unlock (standard time) |
 
 ## Arming Modes
 
@@ -129,13 +141,13 @@ This project is licensed under the MIT License.
 
 This integration is provided "as is" without warranty of any kind. Use at your own risk. The authors are not responsible for any damage or security issues that may arise from using this integration.
 
-**This is an unofficial integration and is not affiliated with, endorsed by, or connected to Aritech, Carrier Global Corporation, or any of their subsidiaries.**
+**This is an unofficial integration and is not affiliated with, endorsed by, or connected to Aritech, Kidde Global Services, or any of their subsidiaries.**
 
 ## Trademarks
 
-- **Aritech** is a trademark of Carrier Global Corporation.
-- **ATS** is a trademark of Carrier Global Corporation.
-- **Carrier** is a trademark of Carrier Global Corporation.
+- **Aritech** is a trademark of KGS Global Corporation.
+- **ATS** is a trademark of KGS Global Corporation.
+- **KGS** is a trademark of KGS Global Corporation.
 - **Home Assistant** is a trademark of the Home Assistant project.
 
 All other trademarks are the property of their respective owners. The use of these trademarks in this project does not imply any affiliation with or endorsement by the trademark holders.

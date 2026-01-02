@@ -1,4 +1,4 @@
-"""Binary sensor platform for Aritech ATS integration."""
+"""Binary sensor platform for Aritech integration."""
 from __future__ import annotations
 
 import logging
@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from aritech_client import AreaState, ZoneState
+from aritech_client import AreaState, ZoneState, DoorState
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import AritechCoordinator
@@ -65,7 +65,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Aritech ATS binary sensors from a config entry."""
+    """Set up Aritech binary sensors from a config entry."""
     coordinator: AritechCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     # Wait for coordinator to have data
@@ -160,6 +160,56 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 area_number=area_num,
                 area_name=area_name,
+            )
+        )
+
+    # Create door binary sensors
+    for door in coordinator.get_doors():
+        door_num = door["number"]
+        door_name = door["name"]
+
+        # Main door lock sensor
+        entities.append(
+            AritechDoorLockBinarySensor(
+                coordinator=coordinator,
+                door_number=door_num,
+                door_name=door_name,
+            )
+        )
+
+        # Door open sensor
+        entities.append(
+            AritechDoorOpenBinarySensor(
+                coordinator=coordinator,
+                door_number=door_num,
+                door_name=door_name,
+            )
+        )
+
+        # Door forced sensor
+        entities.append(
+            AritechDoorForcedBinarySensor(
+                coordinator=coordinator,
+                door_number=door_num,
+                door_name=door_name,
+            )
+        )
+
+        # Door open too long sensor
+        entities.append(
+            AritechDoorOpenTooLongBinarySensor(
+                coordinator=coordinator,
+                door_number=door_num,
+                door_name=door_name,
+            )
+        )
+
+        # Door tamper sensor
+        entities.append(
+            AritechDoorTamperBinarySensor(
+                coordinator=coordinator,
+                door_number=door_num,
+                door_name=door_name,
             )
         )
 
@@ -730,3 +780,326 @@ class AritechAreaPanicBinarySensor(BinarySensorEntity):
         if not area_state:
             return None
         return area_state.has_panic
+
+
+# =============================================================================
+# Door Binary Sensors
+# =============================================================================
+
+
+def _get_door_device_info(
+    coordinator: AritechCoordinator, door_number: int, door_name: str
+) -> DeviceInfo:
+    """Get device info for a door (each door is its own device)."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{coordinator.config_entry.entry_id}_door_{door_number}")},
+        name=door_name,
+        manufacturer=MANUFACTURER,
+        model="Door",
+        via_device=(DOMAIN, coordinator.config_entry.entry_id),
+    )
+
+
+class AritechDoorLockBinarySensor(BinarySensorEntity):
+    """Door lock state sensor - shows if door is locked."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.LOCK
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        door_number: int,
+        door_name: str,
+    ) -> None:
+        """Initialize the door lock binary sensor."""
+        self.coordinator = coordinator
+        self._door_number = door_number
+        self._door_name = door_name
+        self._unregister_callback: callable | None = None
+
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_lock"
+        self._attr_name = "Lock"
+        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        self._unregister_callback = self.coordinator.register_door_callback(
+            self._door_number, self._handle_door_update
+        )
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is being removed."""
+        if self._unregister_callback:
+            self._unregister_callback()
+            self._unregister_callback = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_door_update(self) -> None:
+        """Handle door state update."""
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the door is unlocked (lock binary sensor: on=unlocked)."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return None
+        # Lock sensor is ON when unlocked
+        return not door_state.is_locked
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return {"door_number": self._door_number}
+
+        return {
+            "door_number": self._door_number,
+            "state_text": str(door_state),
+            "is_unlocked": door_state.is_unlocked,
+            "is_time_unlocked": door_state.is_time_unlocked,
+            "is_standard_time_unlocked": door_state.is_standard_time_unlocked,
+            "is_unlocked_period": door_state.is_unlocked_period,
+            "is_disabled": door_state.is_disabled,
+        }
+
+
+class AritechDoorOpenBinarySensor(BinarySensorEntity):
+    """Door open/close sensor."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.DOOR
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        door_number: int,
+        door_name: str,
+    ) -> None:
+        """Initialize the door open binary sensor."""
+        self.coordinator = coordinator
+        self._door_number = door_number
+        self._unregister_callback: callable | None = None
+
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_open"
+        self._attr_name = "Open"
+        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        self._unregister_callback = self.coordinator.register_door_callback(
+            self._door_number, self._handle_door_update
+        )
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is being removed."""
+        if self._unregister_callback:
+            self._unregister_callback()
+            self._unregister_callback = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_door_update(self) -> None:
+        """Handle door state update."""
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the door is open."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return None
+        return door_state.is_opened
+
+
+class AritechDoorForcedBinarySensor(BinarySensorEntity):
+    """Door forced open sensor."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        door_number: int,
+        door_name: str,
+    ) -> None:
+        """Initialize the door forced binary sensor."""
+        self.coordinator = coordinator
+        self._door_number = door_number
+        self._unregister_callback: callable | None = None
+
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_forced"
+        self._attr_name = "Forced"
+        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        self._unregister_callback = self.coordinator.register_door_callback(
+            self._door_number, self._handle_door_update
+        )
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is being removed."""
+        if self._unregister_callback:
+            self._unregister_callback()
+            self._unregister_callback = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_door_update(self) -> None:
+        """Handle door state update."""
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the door was forced open."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return None
+        return door_state.is_forced
+
+
+class AritechDoorOpenTooLongBinarySensor(BinarySensorEntity):
+    """Door open too long sensor."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_icon = "mdi:timer-alert"
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        door_number: int,
+        door_name: str,
+    ) -> None:
+        """Initialize the door open too long binary sensor."""
+        self.coordinator = coordinator
+        self._door_number = door_number
+        self._unregister_callback: callable | None = None
+
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_open_too_long"
+        self._attr_name = "Open Too Long"
+        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        self._unregister_callback = self.coordinator.register_door_callback(
+            self._door_number, self._handle_door_update
+        )
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is being removed."""
+        if self._unregister_callback:
+            self._unregister_callback()
+            self._unregister_callback = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_door_update(self) -> None:
+        """Handle door state update."""
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the door has been open too long."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return None
+        return door_state.is_door_open_too_long
+
+
+class AritechDoorTamperBinarySensor(BinarySensorEntity):
+    """Door reader tamper sensor."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.TAMPER
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        door_number: int,
+        door_name: str,
+    ) -> None:
+        """Initialize the door tamper binary sensor."""
+        self.coordinator = coordinator
+        self._door_number = door_number
+        self._unregister_callback: callable | None = None
+
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_tamper"
+        self._attr_name = "Tamper"
+        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+        self._unregister_callback = self.coordinator.register_door_callback(
+            self._door_number, self._handle_door_update
+        )
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is being removed."""
+        if self._unregister_callback:
+            self._unregister_callback()
+            self._unregister_callback = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_door_update(self) -> None:
+        """Handle door state update."""
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the door reader has been tampered."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return None
+        return door_state.is_reader_tamper

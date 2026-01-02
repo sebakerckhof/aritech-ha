@@ -1,4 +1,4 @@
-"""Alarm control panel platform for Aritech ATS integration."""
+"""Alarm control panel platform for Aritech integration."""
 from __future__ import annotations
 
 import logging
@@ -51,7 +51,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Aritech ATS alarm control panels from a config entry."""
+    """Set up Aritech alarm control panels from a config entry."""
     coordinator: AritechCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     # Wait for coordinator to have data
@@ -78,7 +78,7 @@ async def async_setup_entry(
 
 
 class AritechAlarmControlPanel(AlarmControlPanelEntity):
-    """Representation of an Aritech ATS area as an alarm control panel."""
+    """Representation of an Aritech area as an alarm control panel."""
 
     _attr_has_entity_name = True
     _attr_supported_features = (

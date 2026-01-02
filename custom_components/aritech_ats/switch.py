@@ -1,4 +1,4 @@
-"""Switch platform for Aritech ATS integration."""
+"""Switch platform for Aritech integration."""
 from __future__ import annotations
 
 import logging
@@ -47,7 +47,7 @@ def _get_panel_device_info(coordinator: AritechCoordinator) -> DeviceInfo:
     """Get device info for the main panel."""
     return DeviceInfo(
         identifiers={(DOMAIN, coordinator.config_entry.entry_id)},
-        name=coordinator.panel_name or "Aritech ATS Panel",
+        name=coordinator.panel_name or "Aritech Panel",
         manufacturer=MANUFACTURER,
         model=coordinator.panel_model or "ATS Panel",
         sw_version=coordinator.firmware_version,
@@ -67,12 +67,25 @@ def _get_area_device_info(
     )
 
 
+def _get_door_device_info(
+    coordinator: AritechCoordinator, door_number: int, door_name: str
+) -> DeviceInfo:
+    """Get device info for a door (each door is its own device)."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{coordinator.config_entry.entry_id}_door_{door_number}")},
+        name=door_name,
+        manufacturer=MANUFACTURER,
+        model="Door",
+        via_device=(DOMAIN, coordinator.config_entry.entry_id),
+    )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Aritech ATS switches from a config entry."""
+    """Set up Aritech switches from a config entry."""
     coordinator: AritechCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     # Wait for coordinator to have data
@@ -119,6 +132,25 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 area_number=area["number"],
                 area_name=area["name"],
+            )
+        )
+
+    # Create door switches
+    for door in coordinator.get_doors():
+        # Door enable switch
+        entities.append(
+            AritechDoorEnableSwitch(
+                coordinator=coordinator,
+                door_number=door["number"],
+                door_name=door["name"],
+            )
+        )
+        # Door lock switch
+        entities.append(
+            AritechDoorLockSwitch(
+                coordinator=coordinator,
+                door_number=door["number"],
+                door_name=door["name"],
             )
         )
 
@@ -475,3 +507,201 @@ class AritechForceArmSwitch(SwitchEntity, RestoreEntity):
         self._is_on = False
         self.coordinator.set_force_arm(self._area_number, False)
         self.async_write_ha_state()
+
+
+class AritechDoorEnableSwitch(SwitchEntity):
+    """Switch to enable/disable a door."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_icon = "mdi:door"
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        door_number: int,
+        door_name: str,
+    ) -> None:
+        """Initialize the door enable switch."""
+        self.coordinator = coordinator
+        self._door_number = door_number
+        self._door_name = door_name
+        self._unregister_callback: callable | None = None
+
+        # Entity attributes
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_enable"
+        self._attr_name = "Enabled"
+
+        # Door enable switch belongs to the door device
+        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+
+        self._unregister_callback = self.coordinator.register_door_callback(
+            self._door_number, self._handle_door_update
+        )
+
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is being removed."""
+        if self._unregister_callback:
+            self._unregister_callback()
+            self._unregister_callback = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_door_update(self) -> None:
+        """Handle door state update."""
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if door is enabled (not disabled)."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return None
+        # Switch is ON when door is enabled (not disabled)
+        return not door_state.is_disabled
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return {"door_number": self._door_number}
+
+        return {
+            "door_number": self._door_number,
+            "state_text": str(door_state),
+        }
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable the door."""
+        _LOGGER.info("Enabling door %d (%s)", self._door_number, self._door_name)
+        try:
+            await self.coordinator.async_enable_door(self._door_number)
+        except Exception as err:
+            _LOGGER.error("Failed to enable door %d: %s", self._door_number, err)
+            raise
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable the door."""
+        _LOGGER.info("Disabling door %d (%s)", self._door_number, self._door_name)
+        try:
+            await self.coordinator.async_disable_door(self._door_number)
+        except Exception as err:
+            _LOGGER.error("Failed to disable door %d: %s", self._door_number, err)
+            raise
+
+
+class AritechDoorLockSwitch(SwitchEntity):
+    """Switch to lock/unlock a door."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_icon = "mdi:door-closed-lock"
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        door_number: int,
+        door_name: str,
+    ) -> None:
+        """Initialize the door lock switch."""
+        self.coordinator = coordinator
+        self._door_number = door_number
+        self._door_name = door_name
+        self._unregister_callback: callable | None = None
+
+        # Entity attributes
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_lock"
+        self._attr_name = "Unlocked"
+
+        # Door lock switch belongs to the door device
+        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity is added to hass."""
+        await super().async_added_to_hass()
+
+        self._unregister_callback = self.coordinator.register_door_callback(
+            self._door_number, self._handle_door_update
+        )
+
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity is being removed."""
+        if self._unregister_callback:
+            self._unregister_callback()
+            self._unregister_callback = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_door_update(self) -> None:
+        """Handle door state update."""
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if door is unlocked."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return None
+        # Switch is ON when door is unlocked
+        return not door_state.is_locked
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on lock state."""
+        if self.is_on:
+            return "mdi:door-open"
+        return "mdi:door-closed-lock"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        door_state = self.coordinator.get_door_state_obj(self._door_number)
+        if not door_state:
+            return {"door_number": self._door_number}
+
+        return {
+            "door_number": self._door_number,
+            "state_text": str(door_state),
+            "is_opened": door_state.is_opened,
+        }
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Unlock the door."""
+        _LOGGER.info("Unlocking door %d (%s)", self._door_number, self._door_name)
+        try:
+            await self.coordinator.async_unlock_door(self._door_number)
+        except Exception as err:
+            _LOGGER.error("Failed to unlock door %d: %s", self._door_number, err)
+            raise
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Lock the door."""
+        _LOGGER.info("Locking door %d (%s)", self._door_number, self._door_name)
+        try:
+            await self.coordinator.async_lock_door(self._door_number)
+        except Exception as err:
+            _LOGGER.error("Failed to lock door %d: %s", self._door_number, err)
+            raise

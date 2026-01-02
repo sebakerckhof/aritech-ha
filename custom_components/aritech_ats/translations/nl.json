@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "Verbinden met Aritech ATS alarmsysteem",
-        "description": "Voer de verbindingsgegevens in voor uw Aritech ATS alarmcentrale.",
+        "title": "Verbinden met Aritech alarmsysteem",
+        "description": "Voer de verbindingsgegevens in voor uw Aritech alarmcentrale.",
         "data": {
           "host": "Host",
           "port": "Poort",

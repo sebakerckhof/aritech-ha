@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator for Aritech ATS integration."""
+"""DataUpdateCoordinator for Aritech integration."""
 from __future__ import annotations
 
 import asyncio
@@ -7,17 +7,19 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from aritech_client import AritechClient, AritechMonitor, ChangeEvent, InitializedEvent
-from aritech_client import AreaState, ZoneState, OutputState, TriggerState
+from aritech_client import AreaState, ZoneState, OutputState, TriggerState, DoorState
 
 from .const import (
     DOMAIN,
     CONF_ENCRYPTION_KEY,
     CONF_PIN_CODE,
+    CONF_PANEL_TYPE,
+    PANEL_TYPE_X700,
     UPDATE_INTERVAL,
 )
 
@@ -39,16 +41,18 @@ class AritechData:
     zones: list[dict[str, Any]] = field(default_factory=list)
     outputs: list[dict[str, Any]] = field(default_factory=list)
     triggers: list[dict[str, Any]] = field(default_factory=list)
+    doors: list[dict[str, Any]] = field(default_factory=list)
 
     # Current states keyed by entity number
     area_states: dict[int, dict[str, Any]] = field(default_factory=dict)
     zone_states: dict[int, dict[str, Any]] = field(default_factory=dict)
     output_states: dict[int, dict[str, Any]] = field(default_factory=dict)
     trigger_states: dict[int, dict[str, Any]] = field(default_factory=dict)
+    door_states: dict[int, dict[str, Any]] = field(default_factory=dict)
 
 
 class AritechCoordinator(DataUpdateCoordinator[AritechData]):
-    """Coordinator to manage Aritech ATS panel connection and updates."""
+    """Coordinator to manage Aritech panel connection and updates."""
 
     config_entry: ConfigEntry
 
@@ -77,6 +81,7 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         self._zone_callbacks: dict[int, list[callable]] = {}
         self._output_callbacks: dict[int, list[callable]] = {}
         self._trigger_callbacks: dict[int, list[callable]] = {}
+        self._door_callbacks: dict[int, list[callable]] = {}
 
         # Force arm state per area
         self._force_arm: dict[int, bool] = {}
@@ -110,13 +115,24 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         """Connect to the alarm panel and start monitoring."""
         config = self.config_entry.data
 
-        # Create client
-        self._client = AritechClient({
+        # Build client config based on panel type
+        client_config = {
             "host": config[CONF_HOST],
             "port": config[CONF_PORT],
-            "pin": config[CONF_PIN_CODE],
             "encryption_key": config[CONF_ENCRYPTION_KEY],
-        })
+        }
+
+        # x700 panels use username/password, x500 panels use PIN
+        panel_type = config.get(CONF_PANEL_TYPE)
+        if panel_type == PANEL_TYPE_X700:
+            client_config["username"] = config[CONF_USERNAME]
+            client_config["password"] = config[CONF_PASSWORD]
+        else:
+            # Default to PIN-based auth for backwards compatibility
+            client_config["pin"] = config.get(CONF_PIN_CODE, "")
+
+        # Create client
+        self._client = AritechClient(client_config)
 
         try:
             _LOGGER.debug("Connecting to Aritech panel at %s:%s", config[CONF_HOST], config[CONF_PORT])
@@ -145,7 +161,7 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             await self._monitor.start()
 
             self._connected = True
-            _LOGGER.info("Aritech ATS monitoring started")
+            _LOGGER.info("Aritech monitoring started")
 
         except Exception as err:
             self._connected = False
@@ -175,11 +191,12 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         def handle_initialized(event: InitializedEvent) -> None:
             """Handle initialization event with all entity data."""
             _LOGGER.debug(
-                "Initialized: %d zones, %d areas, %d outputs, %d triggers",
+                "Initialized: %d zones, %d areas, %d outputs, %d triggers, %d doors",
                 len(event.zones),
                 len(event.areas),
                 len(event.outputs),
                 len(event.triggers),
+                len(event.doors),
             )
 
             # Convert NamedItem lists to dicts for backward compatibility
@@ -187,12 +204,14 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             self._data.areas = [{"number": a.number, "name": a.name} for a in event.areas]
             self._data.outputs = [{"number": o.number, "name": o.name} for o in event.outputs]
             self._data.triggers = [{"number": t.number, "name": t.name} for t in event.triggers]
+            self._data.doors = [{"number": d.number, "name": d.name} for d in event.doors]
 
             # Store initial states (these contain state dataclass objects)
             self._data.zone_states = event.zone_states
             self._data.area_states = event.area_states
             self._data.output_states = event.output_states
             self._data.trigger_states = event.trigger_states
+            self._data.door_states = event.door_states
 
             # Update coordinator data
             self.async_set_updated_data(self._data)
@@ -267,13 +286,33 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
                 event.old_data.get("state") if event.old_data else "NEW",
                 event.new_data.get("state"),
             )
-            
+
             # Update stored state
             self._data.trigger_states[event.id] = event.new_data
-            
+
             # Notify specific trigger callbacks
             self._notify_callbacks(self._trigger_callbacks, event.id)
-            
+
+            # Update coordinator
+            self.async_set_updated_data(self._data)
+
+        @self._monitor.on_door_changed
+        def handle_door_changed(event: ChangeEvent) -> None:
+            """Handle door state change."""
+            _LOGGER.debug(
+                "Door %d (%s) changed: %s -> %s",
+                event.id,
+                event.name,
+                event.old_data.get("state") if event.old_data else "NEW",
+                event.new_data.get("state"),
+            )
+
+            # Update stored state
+            self._data.door_states[event.id] = event.new_data
+
+            # Notify specific door callbacks
+            self._notify_callbacks(self._door_callbacks, event.id)
+
             # Update coordinator
             self.async_set_updated_data(self._data)
 
@@ -340,10 +379,21 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         if trigger_num not in self._trigger_callbacks:
             self._trigger_callbacks[trigger_num] = []
         self._trigger_callbacks[trigger_num].append(callback_fn)
-        
+
         def unregister() -> None:
             self._trigger_callbacks[trigger_num].remove(callback_fn)
-        
+
+        return unregister
+
+    def register_door_callback(self, door_num: int, callback_fn: callable) -> callable:
+        """Register a callback for door state changes."""
+        if door_num not in self._door_callbacks:
+            self._door_callbacks[door_num] = []
+        self._door_callbacks[door_num].append(callback_fn)
+
+        def unregister() -> None:
+            self._door_callbacks[door_num].remove(callback_fn)
+
         return unregister
 
     def _get_reconnect_delay(self) -> int:
@@ -506,6 +556,61 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             _LOGGER.error("Failed to deactivate trigger %d: %s", trigger_num, err)
             raise
 
+    async def async_lock_door(self, door_num: int) -> None:
+        """Lock a door."""
+        if not self._client:
+            raise UpdateFailed("Not connected to panel")
+
+        try:
+            await self._client.lock_door(door_num)
+        except Exception as err:
+            _LOGGER.error("Failed to lock door %d: %s", door_num, err)
+            raise
+
+    async def async_unlock_door(self, door_num: int) -> None:
+        """Unlock a door."""
+        if not self._client:
+            raise UpdateFailed("Not connected to panel")
+
+        try:
+            await self._client.unlock_door(door_num)
+        except Exception as err:
+            _LOGGER.error("Failed to unlock door %d: %s", door_num, err)
+            raise
+
+    async def async_unlock_door_standard_time(self, door_num: int) -> None:
+        """Unlock a door for the standard configured time."""
+        if not self._client:
+            raise UpdateFailed("Not connected to panel")
+
+        try:
+            await self._client.unlock_door_standard_time(door_num)
+        except Exception as err:
+            _LOGGER.error("Failed to unlock door %d (standard time): %s", door_num, err)
+            raise
+
+    async def async_enable_door(self, door_num: int) -> None:
+        """Enable a door."""
+        if not self._client:
+            raise UpdateFailed("Not connected to panel")
+
+        try:
+            await self._client.enable_door(door_num)
+        except Exception as err:
+            _LOGGER.error("Failed to enable door %d: %s", door_num, err)
+            raise
+
+    async def async_disable_door(self, door_num: int) -> None:
+        """Disable a door."""
+        if not self._client:
+            raise UpdateFailed("Not connected to panel")
+
+        try:
+            await self._client.disable_door(door_num)
+        except Exception as err:
+            _LOGGER.error("Failed to disable door %d: %s", door_num, err)
+            raise
+
     # =========================================================================
     # DATA ACCESS
     # =========================================================================
@@ -569,3 +674,18 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
     def get_triggers(self) -> list[dict[str, Any]]:
         """Get list of all triggers."""
         return self._data.triggers
+
+    def get_door_state(self, door_num: int) -> dict[str, Any] | None:
+        """Get current state dict of a door (contains 'state' key with DoorState dataclass)."""
+        return self._data.door_states.get(door_num)
+
+    def get_door_state_obj(self, door_num: int) -> DoorState | None:
+        """Get the DoorState dataclass for a door."""
+        state_data = self._data.door_states.get(door_num)
+        if state_data:
+            return state_data.get("state")
+        return None
+
+    def get_doors(self) -> list[dict[str, Any]]:
+        """Get list of all doors."""
+        return self._data.doors

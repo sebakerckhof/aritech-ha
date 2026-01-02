@@ -1,4 +1,4 @@
-"""Fixtures for Aritech ATS tests."""
+"""Fixtures for Aritech tests."""
 from __future__ import annotations
 
 import sys
@@ -15,27 +15,53 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
 from aritech_ats.const import (
     CONF_ENCRYPTION_KEY,
     CONF_PIN_CODE,
+    CONF_PANEL_TYPE,
+    PANEL_TYPE_X500,
+    PANEL_TYPE_X700,
     DOMAIN,
 )
 
-# Test configuration
+# Test configuration - connection only (step 1)
 MOCK_HOST = "192.168.1.100"
 MOCK_PORT = 32000
 MOCK_PIN = "1234"
+MOCK_USERNAME = "admin"
+MOCK_PASSWORD = "password123"
 MOCK_ENCRYPTION_KEY = "123456789012345678901234"
 
-MOCK_CONFIG = {
+MOCK_CONNECTION_CONFIG = {
     CONF_HOST: MOCK_HOST,
     CONF_PORT: MOCK_PORT,
-    CONF_PIN_CODE: MOCK_PIN,
     CONF_ENCRYPTION_KEY: MOCK_ENCRYPTION_KEY,
 }
+
+# Full config for x500 panels (PIN auth)
+MOCK_X500_CONFIG = {
+    CONF_HOST: MOCK_HOST,
+    CONF_PORT: MOCK_PORT,
+    CONF_ENCRYPTION_KEY: MOCK_ENCRYPTION_KEY,
+    CONF_PIN_CODE: MOCK_PIN,
+    CONF_PANEL_TYPE: PANEL_TYPE_X500,
+}
+
+# Full config for x700 panels (username/password auth)
+MOCK_X700_CONFIG = {
+    CONF_HOST: MOCK_HOST,
+    CONF_PORT: MOCK_PORT,
+    CONF_ENCRYPTION_KEY: MOCK_ENCRYPTION_KEY,
+    CONF_USERNAME: MOCK_USERNAME,
+    CONF_PASSWORD: MOCK_PASSWORD,
+    CONF_PANEL_TYPE: PANEL_TYPE_X700,
+}
+
+# Legacy config for backwards compatibility
+MOCK_CONFIG = MOCK_X500_CONFIG
 
 
 # Mock state dataclasses to simulate aritech_client library
@@ -177,8 +203,12 @@ class MockChangeEvent:
     new_data: dict[str, Any]
 
 
-def create_mock_client() -> MagicMock:
-    """Create a mock AritechClient."""
+def create_mock_client(is_x700: bool = False) -> MagicMock:
+    """Create a mock AritechClient.
+
+    Args:
+        is_x700: If True, simulate an x700 panel. If False, simulate x500.
+    """
     client = MagicMock()
     client.connect = AsyncMock()
     client.disconnect = AsyncMock()
@@ -193,9 +223,10 @@ def create_mock_client() -> MagicMock:
     client.deactivate_trigger = AsyncMock()
 
     # Panel info
-    client.panel_model = "ATS4500"
+    client.panel_model = "ATS4700" if is_x700 else "ATS4500"
     client.panel_name = "Test Panel"
     client.firmware_version = "1.2.3"
+    client.is_x700_panel = is_x700
 
     return client
 
@@ -257,14 +288,38 @@ def create_mock_initialized_event() -> MockInitializedEvent:
 
 @pytest.fixture
 def mock_config() -> dict[str, Any]:
-    """Return mock configuration."""
+    """Return mock configuration (x500 for backwards compatibility)."""
     return MOCK_CONFIG.copy()
 
 
 @pytest.fixture
+def mock_connection_config() -> dict[str, Any]:
+    """Return mock connection-only configuration (step 1)."""
+    return MOCK_CONNECTION_CONFIG.copy()
+
+
+@pytest.fixture
+def mock_x500_config() -> dict[str, Any]:
+    """Return mock x500 full configuration."""
+    return MOCK_X500_CONFIG.copy()
+
+
+@pytest.fixture
+def mock_x700_config() -> dict[str, Any]:
+    """Return mock x700 full configuration."""
+    return MOCK_X700_CONFIG.copy()
+
+
+@pytest.fixture
 def mock_client() -> MagicMock:
-    """Return a mock AritechClient."""
-    return create_mock_client()
+    """Return a mock AritechClient (x500)."""
+    return create_mock_client(is_x700=False)
+
+
+@pytest.fixture
+def mock_x700_client() -> MagicMock:
+    """Return a mock AritechClient (x700)."""
+    return create_mock_client(is_x700=True)
 
 
 @pytest.fixture

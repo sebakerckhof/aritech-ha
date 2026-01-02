@@ -2,28 +2,50 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to Aritech ATS Alarm System",
-        "description": "Enter the connection details for your Aritech ATS alarm panel.",
+        "title": "Connect to Aritech Alarm System",
+        "description": "Enter the connection details for your Aritech alarm panel.",
         "data": {
           "host": "Host",
           "port": "Port",
-          "encryption_key": "Encryption Key (24 digits)",
+          "encryption_key": "Encryption Key (24 digits)"
+        },
+        "data_description": {
+          "encryption_key": "The 24-digit encryption key for your alarm panel"
+        }
+      },
+      "x500_auth": {
+        "title": "Authenticate to {panel_name}",
+        "description": "Panel detected: {panel_model}. Enter your PIN code to authenticate.",
+        "data": {
           "pin_code": "PIN Code"
         },
         "data_description": {
-          "encryption_key": "The 24-digit encryption key for your alarm panel",
           "pin_code": "Your alarm panel PIN code"
+        }
+      },
+      "x700_auth": {
+        "title": "Authenticate to {panel_name}",
+        "description": "Panel detected: {panel_model}. Enter your username and password to authenticate.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Your panel username",
+          "password": "Your panel password"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to the alarm panel",
-      "invalid_auth": "Invalid PIN code",
+      "invalid_auth": "Invalid credentials",
       "invalid_input": "Invalid configuration (check encryption key format)",
+      "invalid_pin": "PIN code must contain only digits",
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "This alarm panel is already configured"
+      "already_configured": "This alarm panel is already configured",
+      "no_options": "This integration has no configurable options"
     }
   }
 }

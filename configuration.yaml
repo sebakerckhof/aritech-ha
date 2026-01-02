@@ -8,3 +8,4 @@ logger:
   default: info
   logs:
     custom_components.aritech_ats: debug
+    aritech_client: debug

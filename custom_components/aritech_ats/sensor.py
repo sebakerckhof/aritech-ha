@@ -1,4 +1,4 @@
-"""Sensor platform for Aritech ATS integration."""
+"""Sensor platform for Aritech integration."""
 from __future__ import annotations
 
 import logging
@@ -24,7 +24,7 @@ def _get_panel_device_info(coordinator: AritechCoordinator) -> DeviceInfo:
     """Get device info for the main panel."""
     return DeviceInfo(
         identifiers={(DOMAIN, coordinator.config_entry.entry_id)},
-        name=coordinator.panel_name or "Aritech ATS Panel",
+        name=coordinator.panel_name or "Aritech Panel",
         manufacturer=MANUFACTURER,
         model=coordinator.panel_model or "ATS Panel",
         sw_version=coordinator.firmware_version,
@@ -62,7 +62,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Aritech ATS sensors from a config entry."""
+    """Set up Aritech sensors from a config entry."""
     coordinator: AritechCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     # Wait for coordinator to have data

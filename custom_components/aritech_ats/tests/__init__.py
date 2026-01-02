@@ -1,1 +1,1 @@
-"""Tests for Aritech ATS integration."""
+"""Tests for Aritech integration."""

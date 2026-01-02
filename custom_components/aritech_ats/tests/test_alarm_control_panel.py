@@ -1,4 +1,4 @@
-"""Tests for Aritech ATS alarm control panel."""
+"""Tests for Aritech alarm control panel."""
 from __future__ import annotations
 
 import sys

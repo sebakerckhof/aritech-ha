@@ -1,4 +1,4 @@
-"""The Aritech ATS integration."""
+"""The Aritech integration."""
 from __future__ import annotations
 
 import logging
@@ -8,7 +8,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_PANEL_TYPE, PANEL_TYPE_X500
 from .coordinator import AritechCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,14 +16,39 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.SENSOR,
     Platform.SWITCH,
 ]
 
 
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate old entry to new version.
+
+    Version 1 -> 2: Added panel_type field for x500/x700 distinction.
+    Old entries are assumed to be x500 panels (PIN-based auth).
+    """
+    _LOGGER.debug("Migrating config entry from version %s", config_entry.version)
+
+    if config_entry.version == 1:
+        # Version 1 entries are x500 panels with PIN auth
+        new_data = {**config_entry.data}
+
+        # Add panel_type if not present (assume x500 for old entries)
+        if CONF_PANEL_TYPE not in new_data:
+            new_data[CONF_PANEL_TYPE] = PANEL_TYPE_X500
+
+        hass.config_entries.async_update_entry(
+            config_entry, data=new_data, version=2
+        )
+        _LOGGER.info("Migrated config entry to version 2")
+
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Aritech ATS from a config entry."""
-    _LOGGER.debug("Setting up Aritech ATS integration")
+    """Set up Aritech from a config entry."""
+    _LOGGER.debug("Setting up Aritech integration")
 
     # Create coordinator
     coordinator = AritechCoordinator(hass, entry)
@@ -47,7 +72,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    _LOGGER.debug("Unloading Aritech ATS integration")
+    _LOGGER.debug("Unloading Aritech integration")
 
     # Unload platforms
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
