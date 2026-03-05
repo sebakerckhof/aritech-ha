@@ -53,7 +53,6 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 - Connection status
 - Area state text
 - Zone state text
-- Trigger state text
 
 ### Switches
 
@@ -74,6 +73,34 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 
 **Door controls** (per door device):
 - Unlock (Standard Time) - momentary unlock for panel-configured duration
+
+### Diagnostics
+
+The integration provides a diagnostics download from the Home Assistant UI for troubleshooting. Sensitive data (host, encryption key, credentials) is automatically redacted.
+
+## Architecture
+
+The integration uses a **push-based** architecture (`local_push`) — the panel pushes state changes via a persistent TCP connection. There is no polling.
+
+```
+aritech_client (PyPI library)
+    └── coordinator.py          — DataUpdateCoordinator, TCP connection, push callbacks
+        ├── alarm_control_panel.py  — Arm/disarm per area
+        ├── binary_sensor.py        — Zone/area/door/output/filter states
+        ├── sensor.py               — Panel info + state text sensors
+        ├── switch.py               — Zone inhibit, triggers, force arm, door lock
+        └── button.py               — Door unlock (standard time)
+```
+
+### Key design decisions
+
+- **CoordinatorEntity** base class for all entities — automatic listener cleanup, no manual callback registration
+- **AritechBinarySensor** base class eliminates boilerplate across 17+ binary sensor types
+- **helpers.py** centralizes shared DeviceInfo functions
+- **No polling**: `update_interval=None`, the panel pushes state changes via TCP
+- **Thread safety**: aritech_client callbacks can arrive from background threads — all callbacks use `call_soon_threadsafe` to safely schedule on the event loop
+- **Unified state handler**: A single `_handle_state_change` method processes all entity type updates
+- **Reconnect with exponential backoff**: 5s → 120s delay, with proper task cancellation on unload
 
 ## Requirements
 
@@ -128,7 +155,21 @@ After setup, the integration creates:
 
 ## Force Arm
 
-Enable the "Force Arm" switch for an area to arm even when zones are not ready. Use with caution.
+Enable the "Force Arm" switch for an area to arm even when zones are not ready. The setting persists across Home Assistant restarts. Use with caution.
+
+## Disk Wear Considerations
+
+Since this is a push-based integration, busy panels (many PIR zones) can generate frequent state updates. Each update notifies all entities, and Home Assistant's recorder writes changed states to SQLite.
+
+To reduce disk writes on SD card / USB installations, consider adding recorder excludes for high-frequency entities:
+
+```yaml
+recorder:
+  exclude:
+    entity_globs:
+      - binary_sensor.*_zone_*_active   # PIR motion sensors
+      - sensor.*_zone_*_state           # Zone state text
+```
 
 ## Troubleshooting
 
@@ -145,6 +186,7 @@ Enable the "Force Arm" switch for an area to arm even when zones are not ready. 
 ### Entities unavailable
 - Check the Connection Status sensor
 - Review Home Assistant logs for error messages
+- Download diagnostics via **Settings** > **Devices & Services** > **Aritech** > **...** > **Download diagnostics**
 
 ## Support
 
