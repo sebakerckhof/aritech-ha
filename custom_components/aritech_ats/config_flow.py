@@ -1,6 +1,7 @@
 """Config flow for Aritech integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -28,6 +29,8 @@ from .const import (
     PANEL_TYPE_X700,
     DEFAULT_PORT,
     DEFAULT_ENCRYPTION_KEY,
+    CONNECT_TIMEOUT,
+    INITIALIZE_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,10 +98,8 @@ async def validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> dict
     })
 
     try:
-        await client.connect()
-
-        # Get panel description (unencrypted query, doesn't require login)
-        await client.get_description()
+        await asyncio.wait_for(client.connect(), timeout=CONNECT_TIMEOUT)
+        await asyncio.wait_for(client.get_description(), timeout=CONNECT_TIMEOUT)
 
         panel_name = client.panel_name or "Aritech"
         panel_model = client.panel_model or ""
@@ -110,6 +111,9 @@ async def validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> dict
             "is_x700": is_x700,
         }
 
+    except asyncio.TimeoutError as err:
+        _LOGGER.error("Timeout connecting to Aritech panel at %s:%s", host, port)
+        raise CannotConnect("Connection timed out") from err
     except Exception as err:
         _LOGGER.error("Failed to connect to Aritech panel: %s", err)
         raise CannotConnect(f"Failed to connect: {err}") from err
@@ -143,8 +147,8 @@ async def validate_full_connection(hass: HomeAssistant, data: dict[str, Any]) ->
     client = AritechClient(client_config)
 
     try:
-        await client.connect()
-        await client.initialize()
+        await asyncio.wait_for(client.connect(), timeout=CONNECT_TIMEOUT)
+        await asyncio.wait_for(client.initialize(), timeout=INITIALIZE_TIMEOUT)
 
         panel_name = client.panel_name or "Aritech"
         panel_model = client.panel_model or ""
@@ -155,6 +159,9 @@ async def validate_full_connection(hass: HomeAssistant, data: dict[str, Any]) ->
             "panel_name": panel_name,
         }
 
+    except asyncio.TimeoutError as err:
+        _LOGGER.error("Timeout during full connection to Aritech panel at %s:%s", host, port)
+        raise CannotConnect("Connection timed out") from err
     except Exception as err:
         _LOGGER.error("Failed to connect to Aritech panel: %s", err)
         if "login" in str(err).lower() or "auth" in str(err).lower():

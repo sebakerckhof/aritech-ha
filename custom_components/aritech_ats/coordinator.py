@@ -162,16 +162,21 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             await self.async_disconnect()
             raise UpdateFailed(f"Failed to connect: {err}") from err
 
-    async def async_disconnect(self) -> None:
-        """Disconnect from the alarm panel."""
-        # Cancel any pending reconnect task
-        if self._reconnect_task and not self._reconnect_task.done():
+    async def async_disconnect(self, _from_reconnect: bool = False) -> None:
+        """Disconnect from the alarm panel.
+
+        Args:
+            _from_reconnect: True when called from within the reconnect task,
+                to avoid the task trying to cancel and await itself.
+        """
+        # Cancel any pending reconnect task (but not if we're inside it)
+        if not _from_reconnect and self._reconnect_task and not self._reconnect_task.done():
             self._reconnect_task.cancel()
             try:
                 await self._reconnect_task
             except asyncio.CancelledError:
                 pass
-            self._reconnect_task = None
+        self._reconnect_task = None
 
         if self._monitor:
             self._monitor.stop()
@@ -214,29 +219,43 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
 
             self.async_set_updated_data(self._data)
 
+        # State change callbacks — use call_soon_threadsafe because the
+        # aritech_client library may invoke these from a background thread.
         @self._monitor.on_zone_changed
         def handle_zone_changed(event: ChangeEvent) -> None:
-            self._handle_state_change("Zone", event, self._data.zone_states)
+            self.hass.loop.call_soon_threadsafe(
+                self._handle_state_change, "Zone", event, self._data.zone_states
+            )
 
         @self._monitor.on_area_changed
         def handle_area_changed(event: ChangeEvent) -> None:
-            self._handle_state_change("Area", event, self._data.area_states)
+            self.hass.loop.call_soon_threadsafe(
+                self._handle_state_change, "Area", event, self._data.area_states
+            )
 
         @self._monitor.on_output_changed
         def handle_output_changed(event: ChangeEvent) -> None:
-            self._handle_state_change("Output", event, self._data.output_states)
+            self.hass.loop.call_soon_threadsafe(
+                self._handle_state_change, "Output", event, self._data.output_states
+            )
 
         @self._monitor.on_trigger_changed
         def handle_trigger_changed(event: ChangeEvent) -> None:
-            self._handle_state_change("Trigger", event, self._data.trigger_states)
+            self.hass.loop.call_soon_threadsafe(
+                self._handle_state_change, "Trigger", event, self._data.trigger_states
+            )
 
         @self._monitor.on_door_changed
         def handle_door_changed(event: ChangeEvent) -> None:
-            self._handle_state_change("Door", event, self._data.door_states)
+            self.hass.loop.call_soon_threadsafe(
+                self._handle_state_change, "Door", event, self._data.door_states
+            )
 
         @self._monitor.on_filter_changed
         def handle_filter_changed(event: ChangeEvent) -> None:
-            self._handle_state_change("Filter", event, self._data.filter_states)
+            self.hass.loop.call_soon_threadsafe(
+                self._handle_state_change, "Filter", event, self._data.filter_states
+            )
 
         @self._monitor.on_error
         def handle_error(error: Exception) -> None:
@@ -289,7 +308,7 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             await asyncio.sleep(delay)
 
             try:
-                await self.async_disconnect()
+                await self.async_disconnect(_from_reconnect=True)
                 await self.async_connect()
                 _LOGGER.info(
                     "Reconnected to Aritech panel successfully after %d attempts",

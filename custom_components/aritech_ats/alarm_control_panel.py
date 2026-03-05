@@ -17,7 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from aritech_client import AreaState
 
 from .const import DOMAIN
-from .coordinator import AritechCoordinator, AritechData
+from .coordinator import AritechCoordinator
 from .helpers import get_entity_device_info
 
 _LOGGER = logging.getLogger(__name__)
