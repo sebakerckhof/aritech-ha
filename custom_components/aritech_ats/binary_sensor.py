@@ -10,14 +10,13 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from aritech_client import AreaState, ZoneState, DoorState
-
-from .const import DOMAIN, MANUFACTURER
-from .coordinator import AritechCoordinator
+from .const import DOMAIN
+from .coordinator import AritechCoordinator, AritechData
+from .helpers import get_entity_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,25 +38,352 @@ ZONE_NAME_DEVICE_CLASS_PATTERNS: list[tuple[str, BinarySensorDeviceClass]] = [
 
 
 def guess_device_class(zone_name: str) -> BinarySensorDeviceClass | None:
-    """Guess the device class based on zone name."""
+    """Guess the device class based on the zone name."""
     for pattern, device_class in ZONE_NAME_DEVICE_CLASS_PATTERNS:
         if re.search(pattern, zone_name):
             return device_class
-    # Default to motion for generic zones
-    return BinarySensorDeviceClass.MOTION
+    return None
 
 
-def _get_zone_device_info(
-    coordinator: AritechCoordinator, zone_number: int, zone_name: str
-) -> DeviceInfo:
-    """Get device info for a zone (each zone is its own device)."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{coordinator.config_entry.entry_id}_zone_{zone_number}")},
-        name=zone_name,
-        manufacturer=MANUFACTURER,
-        model="Zone",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
-    )
+# =============================================================================
+# Base class — eliminates boilerplate across all binary sensor classes
+# =============================================================================
+
+
+class AritechBinarySensor(CoordinatorEntity[AritechCoordinator], BinarySensorEntity):
+    """Base class for all Aritech binary sensors.
+
+    Uses CoordinatorEntity for automatic listener registration/cleanup,
+    eliminating manual callback management in each subclass.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: AritechCoordinator,
+        entity_type: str,
+        number: int,
+        name: str,
+        suffix: str,
+        device_class: BinarySensorDeviceClass | None = None,
+        icon: str | None = None,
+    ) -> None:
+        """Initialize the binary sensor."""
+        super().__init__(coordinator)
+        self._number = number
+
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{entity_type}_{number}_{suffix}"
+        self._attr_name = suffix.replace("_", " ").title()
+        self._attr_device_info = get_entity_device_info(coordinator, entity_type, number, name)
+        if device_class:
+            self._attr_device_class = device_class
+        if icon:
+            self._attr_icon = icon
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.connected
+
+
+# =============================================================================
+# Zone Binary Sensors
+# =============================================================================
+
+
+class AritechZoneActiveBinarySensor(AritechBinarySensor):
+    """Zone active/motion sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, zone_number: int, zone_name: str) -> None:
+        super().__init__(
+            coordinator, "zone", zone_number, zone_name, "active",
+            device_class=guess_device_class(zone_name),
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        zone_state = self.coordinator.get_zone_state_obj(self._number)
+        return zone_state.is_active if zone_state else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        zone_state = self.coordinator.get_zone_state_obj(self._number)
+        if not zone_state:
+            return {"zone_number": self._number}
+        return {
+            "zone_number": self._number,
+            "state_text": str(zone_state),
+            "is_set": zone_state.is_set,
+            "is_anti_mask": zone_state.is_anti_mask,
+            "is_in_soak_test": zone_state.is_in_soak_test,
+            "has_battery_fault": zone_state.has_battery_fault,
+            "is_dirty": zone_state.is_dirty,
+        }
+
+
+class AritechZoneTamperBinarySensor(AritechBinarySensor):
+    """Zone tamper sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, zone_number: int, zone_name: str) -> None:
+        super().__init__(coordinator, "zone", zone_number, zone_name, "tamper", BinarySensorDeviceClass.TAMPER)
+
+    @property
+    def is_on(self) -> bool | None:
+        zone_state = self.coordinator.get_zone_state_obj(self._number)
+        return zone_state.is_tampered if zone_state else None
+
+
+class AritechZoneFaultBinarySensor(AritechBinarySensor):
+    """Zone fault sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, zone_number: int, zone_name: str) -> None:
+        super().__init__(coordinator, "zone", zone_number, zone_name, "fault", BinarySensorDeviceClass.PROBLEM)
+
+    @property
+    def is_on(self) -> bool | None:
+        zone_state = self.coordinator.get_zone_state_obj(self._number)
+        return zone_state.has_fault if zone_state else None
+
+
+class AritechZoneAlarmingBinarySensor(AritechBinarySensor):
+    """Zone alarming sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, zone_number: int, zone_name: str) -> None:
+        super().__init__(coordinator, "zone", zone_number, zone_name, "alarming", BinarySensorDeviceClass.SAFETY)
+
+    @property
+    def is_on(self) -> bool | None:
+        zone_state = self.coordinator.get_zone_state_obj(self._number)
+        return zone_state.is_alarming if zone_state else None
+
+
+class AritechZoneIsolatedBinarySensor(AritechBinarySensor):
+    """Zone isolated sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, zone_number: int, zone_name: str) -> None:
+        super().__init__(coordinator, "zone", zone_number, zone_name, "isolated", icon="mdi:link-off")
+
+    @property
+    def is_on(self) -> bool | None:
+        zone_state = self.coordinator.get_zone_state_obj(self._number)
+        return zone_state.is_isolated if zone_state else None
+
+
+# =============================================================================
+# Area Binary Sensors
+# =============================================================================
+
+
+class AritechAreaAlarmBinarySensor(AritechBinarySensor):
+    """Area alarm sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, area_number: int, area_name: str) -> None:
+        super().__init__(coordinator, "area", area_number, area_name, "alarm", BinarySensorDeviceClass.SAFETY)
+
+    @property
+    def is_on(self) -> bool | None:
+        area_state = self.coordinator.get_area_state_obj(self._number)
+        if not area_state:
+            return None
+        return area_state.is_alarming or area_state.is_alarm_acknowledged
+
+
+class AritechAreaTamperBinarySensor(AritechBinarySensor):
+    """Area tamper sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, area_number: int, area_name: str) -> None:
+        super().__init__(coordinator, "area", area_number, area_name, "tamper", BinarySensorDeviceClass.TAMPER)
+
+    @property
+    def is_on(self) -> bool | None:
+        area_state = self.coordinator.get_area_state_obj(self._number)
+        return area_state.is_tampered if area_state else None
+
+
+class AritechAreaFireBinarySensor(AritechBinarySensor):
+    """Area fire sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, area_number: int, area_name: str) -> None:
+        super().__init__(coordinator, "area", area_number, area_name, "fire", BinarySensorDeviceClass.SMOKE)
+
+    @property
+    def is_on(self) -> bool | None:
+        area_state = self.coordinator.get_area_state_obj(self._number)
+        return area_state.has_fire if area_state else None
+
+
+class AritechAreaPanicBinarySensor(AritechBinarySensor):
+    """Area panic sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, area_number: int, area_name: str) -> None:
+        super().__init__(
+            coordinator, "area", area_number, area_name, "panic",
+            BinarySensorDeviceClass.SAFETY, icon="mdi:alert",
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        area_state = self.coordinator.get_area_state_obj(self._number)
+        return area_state.has_panic if area_state else None
+
+
+# =============================================================================
+# Door Binary Sensors
+# =============================================================================
+
+
+class AritechDoorLockBinarySensor(AritechBinarySensor):
+    """Door lock state sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, door_number: int, door_name: str) -> None:
+        super().__init__(coordinator, "door", door_number, door_name, "lock", BinarySensorDeviceClass.LOCK)
+
+    @property
+    def is_on(self) -> bool | None:
+        door_state = self.coordinator.get_door_state_obj(self._number)
+        if not door_state:
+            return None
+        return not door_state.is_locked
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        door_state = self.coordinator.get_door_state_obj(self._number)
+        if not door_state:
+            return {"door_number": self._number}
+        return {
+            "door_number": self._number,
+            "state_text": str(door_state),
+            "is_unlocked": door_state.is_unlocked,
+            "is_time_unlocked": door_state.is_time_unlocked,
+            "is_standard_time_unlocked": door_state.is_standard_time_unlocked,
+            "is_unlocked_period": door_state.is_unlocked_period,
+            "is_disabled": door_state.is_disabled,
+        }
+
+
+class AritechDoorOpenBinarySensor(AritechBinarySensor):
+    """Door open/close sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, door_number: int, door_name: str) -> None:
+        super().__init__(coordinator, "door", door_number, door_name, "open", BinarySensorDeviceClass.DOOR)
+
+    @property
+    def is_on(self) -> bool | None:
+        door_state = self.coordinator.get_door_state_obj(self._number)
+        return door_state.is_opened if door_state else None
+
+
+class AritechDoorForcedBinarySensor(AritechBinarySensor):
+    """Door forced open sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, door_number: int, door_name: str) -> None:
+        super().__init__(coordinator, "door", door_number, door_name, "forced", BinarySensorDeviceClass.PROBLEM)
+
+    @property
+    def is_on(self) -> bool | None:
+        door_state = self.coordinator.get_door_state_obj(self._number)
+        return door_state.is_forced if door_state else None
+
+
+class AritechDoorOpenTooLongBinarySensor(AritechBinarySensor):
+    """Door open too long sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, door_number: int, door_name: str) -> None:
+        super().__init__(
+            coordinator, "door", door_number, door_name, "open_too_long",
+            BinarySensorDeviceClass.PROBLEM, icon="mdi:timer-alert",
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        door_state = self.coordinator.get_door_state_obj(self._number)
+        return door_state.is_door_open_too_long if door_state else None
+
+
+class AritechDoorTamperBinarySensor(AritechBinarySensor):
+    """Door reader tamper sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, door_number: int, door_name: str) -> None:
+        super().__init__(coordinator, "door", door_number, door_name, "tamper", BinarySensorDeviceClass.TAMPER)
+
+    @property
+    def is_on(self) -> bool | None:
+        door_state = self.coordinator.get_door_state_obj(self._number)
+        return door_state.is_reader_tamper if door_state else None
+
+
+# =============================================================================
+# Output Binary Sensors (read-only)
+# =============================================================================
+
+
+class AritechOutputActiveBinarySensor(AritechBinarySensor):
+    """Output active state sensor (read-only)."""
+
+    def __init__(self, coordinator: AritechCoordinator, output_number: int, output_name: str) -> None:
+        super().__init__(
+            coordinator, "output", output_number, output_name, "active",
+            BinarySensorDeviceClass.POWER, icon="mdi:electric-switch",
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        output_state = self.coordinator.get_output_state_obj(self._number)
+        if not output_state:
+            return None
+        return output_state.is_on or output_state.is_active
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        output_state = self.coordinator.get_output_state_obj(self._number)
+        if not output_state:
+            return {"output_number": self._number}
+        return {
+            "output_number": self._number,
+            "is_on": output_state.is_on,
+            "is_active": output_state.is_active,
+            "is_forced": output_state.is_forced,
+            "state_text": str(output_state),
+        }
+
+
+class AritechOutputForcedBinarySensor(AritechBinarySensor):
+    """Output forced state sensor (read-only)."""
+
+    def __init__(self, coordinator: AritechCoordinator, output_number: int, output_name: str) -> None:
+        super().__init__(coordinator, "output", output_number, output_name, "forced", icon="mdi:lock")
+
+    @property
+    def is_on(self) -> bool | None:
+        output_state = self.coordinator.get_output_state_obj(self._number)
+        return output_state.is_forced if output_state else None
+
+
+# =============================================================================
+# Filter Binary Sensors
+# =============================================================================
+
+
+class AritechFilterActiveBinarySensor(AritechBinarySensor):
+    """Filter active state sensor."""
+
+    def __init__(self, coordinator: AritechCoordinator, filter_number: int, filter_name: str) -> None:
+        super().__init__(coordinator, "filter", filter_number, filter_name, "active", icon="mdi:filter")
+
+    @property
+    def is_on(self) -> bool | None:
+        filter_state = self.coordinator.get_filter_state_obj(self._number)
+        return filter_state.is_active if filter_state else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"filter_number": self._number}
+
+
+# =============================================================================
+# Platform setup
+# =============================================================================
 
 
 async def async_setup_entry(
@@ -68,1316 +394,58 @@ async def async_setup_entry(
     """Set up Aritech binary sensors from a config entry."""
     coordinator: AritechCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    # Wait for coordinator to have data
     if not coordinator.data:
         _LOGGER.warning("Coordinator has no data yet, waiting for initialization")
         await coordinator.async_config_entry_first_refresh()
 
     entities: list[BinarySensorEntity] = []
 
-    # Create multiple binary sensors per zone (each zone is its own device)
+    # Zone sensors
     for zone in coordinator.get_zones():
-        zone_num = zone["number"]
-        zone_name = zone["name"]
+        num, name = zone["number"], zone["name"]
+        entities.extend([
+            AritechZoneActiveBinarySensor(coordinator, num, name),
+            AritechZoneTamperBinarySensor(coordinator, num, name),
+            AritechZoneFaultBinarySensor(coordinator, num, name),
+            AritechZoneAlarmingBinarySensor(coordinator, num, name),
+            AritechZoneIsolatedBinarySensor(coordinator, num, name),
+        ])
 
-        # Main zone sensor (active state - motion/door/etc)
-        entities.append(
-            AritechZoneActiveBinarySensor(
-                coordinator=coordinator,
-                zone_number=zone_num,
-                zone_name=zone_name,
-            )
-        )
-
-        # Zone tamper sensor
-        entities.append(
-            AritechZoneTamperBinarySensor(
-                coordinator=coordinator,
-                zone_number=zone_num,
-                zone_name=zone_name,
-            )
-        )
-
-        # Zone fault sensor
-        entities.append(
-            AritechZoneFaultBinarySensor(
-                coordinator=coordinator,
-                zone_number=zone_num,
-                zone_name=zone_name,
-            )
-        )
-
-        # Zone alarming sensor
-        entities.append(
-            AritechZoneAlarmingBinarySensor(
-                coordinator=coordinator,
-                zone_number=zone_num,
-                zone_name=zone_name,
-            )
-        )
-
-        # Zone isolated sensor
-        entities.append(
-            AritechZoneIsolatedBinarySensor(
-                coordinator=coordinator,
-                zone_number=zone_num,
-                zone_name=zone_name,
-            )
-        )
-
-    # Create area status binary sensors (alarm, tamper, fire, panic)
+    # Area sensors
     for area in coordinator.get_areas():
-        area_num = area["number"]
-        area_name = area["name"]
+        num, name = area["number"], area["name"]
+        entities.extend([
+            AritechAreaAlarmBinarySensor(coordinator, num, name),
+            AritechAreaTamperBinarySensor(coordinator, num, name),
+            AritechAreaFireBinarySensor(coordinator, num, name),
+            AritechAreaPanicBinarySensor(coordinator, num, name),
+        ])
 
-        # Alarm sensor for each area
-        entities.append(
-            AritechAreaAlarmBinarySensor(
-                coordinator=coordinator,
-                area_number=area_num,
-                area_name=area_name,
-            )
-        )
-        # Tamper sensor for each area
-        entities.append(
-            AritechAreaTamperBinarySensor(
-                coordinator=coordinator,
-                area_number=area_num,
-                area_name=area_name,
-            )
-        )
-        # Fire sensor for each area
-        entities.append(
-            AritechAreaFireBinarySensor(
-                coordinator=coordinator,
-                area_number=area_num,
-                area_name=area_name,
-            )
-        )
-        # Panic sensor for each area
-        entities.append(
-            AritechAreaPanicBinarySensor(
-                coordinator=coordinator,
-                area_number=area_num,
-                area_name=area_name,
-            )
-        )
-
-    # Create door binary sensors
+    # Door sensors
     for door in coordinator.get_doors():
-        door_num = door["number"]
-        door_name = door["name"]
+        num, name = door["number"], door["name"]
+        entities.extend([
+            AritechDoorLockBinarySensor(coordinator, num, name),
+            AritechDoorOpenBinarySensor(coordinator, num, name),
+            AritechDoorForcedBinarySensor(coordinator, num, name),
+            AritechDoorOpenTooLongBinarySensor(coordinator, num, name),
+            AritechDoorTamperBinarySensor(coordinator, num, name),
+        ])
 
-        # Main door lock sensor
-        entities.append(
-            AritechDoorLockBinarySensor(
-                coordinator=coordinator,
-                door_number=door_num,
-                door_name=door_name,
-            )
-        )
-
-        # Door open sensor
-        entities.append(
-            AritechDoorOpenBinarySensor(
-                coordinator=coordinator,
-                door_number=door_num,
-                door_name=door_name,
-            )
-        )
-
-        # Door forced sensor
-        entities.append(
-            AritechDoorForcedBinarySensor(
-                coordinator=coordinator,
-                door_number=door_num,
-                door_name=door_name,
-            )
-        )
-
-        # Door open too long sensor
-        entities.append(
-            AritechDoorOpenTooLongBinarySensor(
-                coordinator=coordinator,
-                door_number=door_num,
-                door_name=door_name,
-            )
-        )
-
-        # Door tamper sensor
-        entities.append(
-            AritechDoorTamperBinarySensor(
-                coordinator=coordinator,
-                door_number=door_num,
-                door_name=door_name,
-            )
-        )
-
-    # Create output binary sensors (read-only state)
+    # Output sensors (read-only)
     for output in coordinator.get_outputs():
-        output_num = output["number"]
-        output_name = output["name"]
+        num, name = output["number"], output["name"]
+        entities.extend([
+            AritechOutputActiveBinarySensor(coordinator, num, name),
+            AritechOutputForcedBinarySensor(coordinator, num, name),
+        ])
 
-        entities.append(
-            AritechOutputActiveBinarySensor(
-                coordinator=coordinator,
-                output_number=output_num,
-                output_name=output_name,
-            )
-        )
-        entities.append(
-            AritechOutputForcedBinarySensor(
-                coordinator=coordinator,
-                output_number=output_num,
-                output_name=output_name,
-            )
-        )
-
-    # Create filter binary sensors
-    for filter_item in coordinator.get_filters():
-        filter_num = filter_item["number"]
-        filter_name = filter_item["name"]
-
-        entities.append(
-            AritechFilterActiveBinarySensor(
-                coordinator=coordinator,
-                filter_number=filter_num,
-                filter_name=filter_name,
-            )
-        )
+    # Filter sensors
+    for filter_ in coordinator.get_filters():
+        entities.append(AritechFilterActiveBinarySensor(coordinator, filter_["number"], filter_["name"]))
 
     if entities:
         _LOGGER.info("Setting up %d binary sensors", len(entities))
         async_add_entities(entities)
     else:
-        _LOGGER.warning("No zones or areas found to create binary sensors")
-
-
-# =============================================================================
-# Zone Binary Sensors (each zone is its own device)
-# =============================================================================
-
-
-class AritechZoneActiveBinarySensor(BinarySensorEntity):
-    """Zone active/motion sensor - the primary sensor for zone detection."""
-
-    _attr_has_entity_name = True
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        zone_number: int,
-        zone_name: str,
-    ) -> None:
-        """Initialize the zone active binary sensor."""
-        self.coordinator = coordinator
-        self._zone_number = zone_number
-        self._zone_name = zone_name
-        self._unregister_callback: callable | None = None
-
-        # Entity attributes
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_zone_{zone_number}_active"
-        self._attr_name = "Active"
-
-        # Guess device class from zone name
-        self._attr_device_class = guess_device_class(zone_name)
-
-        # Each zone is its own device
-        self._attr_device_info = _get_zone_device_info(coordinator, zone_number, zone_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-
-        self._unregister_callback = self.coordinator.register_zone_callback(
-            self._zone_number, self._handle_zone_update
-        )
-
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_zone_update(self) -> None:
-        """Handle zone state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the zone is active."""
-        zone_state = self.coordinator.get_zone_state_obj(self._zone_number)
-        if not zone_state:
-            return None
-        return zone_state.is_active
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        zone_state = self.coordinator.get_zone_state_obj(self._zone_number)
-        if not zone_state:
-            return {"zone_number": self._zone_number}
-
-        return {
-            "zone_number": self._zone_number,
-            "state_text": str(zone_state),
-            "is_set": zone_state.is_set,
-            "is_anti_mask": zone_state.is_anti_mask,
-            "is_in_soak_test": zone_state.is_in_soak_test,
-            "has_battery_fault": zone_state.has_battery_fault,
-            "is_dirty": zone_state.is_dirty,
-        }
-
-
-class AritechZoneTamperBinarySensor(BinarySensorEntity):
-    """Zone tamper sensor."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.TAMPER
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        zone_number: int,
-        zone_name: str,
-    ) -> None:
-        """Initialize the zone tamper binary sensor."""
-        self.coordinator = coordinator
-        self._zone_number = zone_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_zone_{zone_number}_tamper"
-        self._attr_name = "Tamper"
-        self._attr_device_info = _get_zone_device_info(coordinator, zone_number, zone_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_zone_callback(
-            self._zone_number, self._handle_zone_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_zone_update(self) -> None:
-        """Handle zone state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the zone is tampered."""
-        zone_state = self.coordinator.get_zone_state_obj(self._zone_number)
-        if not zone_state:
-            return None
-        return zone_state.is_tampered
-
-
-class AritechZoneFaultBinarySensor(BinarySensorEntity):
-    """Zone fault sensor."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        zone_number: int,
-        zone_name: str,
-    ) -> None:
-        """Initialize the zone fault binary sensor."""
-        self.coordinator = coordinator
-        self._zone_number = zone_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_zone_{zone_number}_fault"
-        self._attr_name = "Fault"
-        self._attr_device_info = _get_zone_device_info(coordinator, zone_number, zone_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_zone_callback(
-            self._zone_number, self._handle_zone_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_zone_update(self) -> None:
-        """Handle zone state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the zone has a fault."""
-        zone_state = self.coordinator.get_zone_state_obj(self._zone_number)
-        if not zone_state:
-            return None
-        return zone_state.has_fault
-
-
-class AritechZoneAlarmingBinarySensor(BinarySensorEntity):
-    """Zone alarming sensor."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.SAFETY
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        zone_number: int,
-        zone_name: str,
-    ) -> None:
-        """Initialize the zone alarming binary sensor."""
-        self.coordinator = coordinator
-        self._zone_number = zone_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_zone_{zone_number}_alarming"
-        self._attr_name = "Alarming"
-        self._attr_device_info = _get_zone_device_info(coordinator, zone_number, zone_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_zone_callback(
-            self._zone_number, self._handle_zone_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_zone_update(self) -> None:
-        """Handle zone state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the zone is alarming."""
-        zone_state = self.coordinator.get_zone_state_obj(self._zone_number)
-        if not zone_state:
-            return None
-        return zone_state.is_alarming
-
-
-class AritechZoneIsolatedBinarySensor(BinarySensorEntity):
-    """Zone isolated sensor."""
-
-    _attr_has_entity_name = True
-    _attr_icon = "mdi:link-off"
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        zone_number: int,
-        zone_name: str,
-    ) -> None:
-        """Initialize the zone isolated binary sensor."""
-        self.coordinator = coordinator
-        self._zone_number = zone_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_zone_{zone_number}_isolated"
-        self._attr_name = "Isolated"
-        self._attr_device_info = _get_zone_device_info(coordinator, zone_number, zone_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_zone_callback(
-            self._zone_number, self._handle_zone_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_zone_update(self) -> None:
-        """Handle zone state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the zone is isolated."""
-        zone_state = self.coordinator.get_zone_state_obj(self._zone_number)
-        if not zone_state:
-            return None
-        return zone_state.is_isolated
-
-
-# =============================================================================
-# Area Binary Sensors
-# =============================================================================
-
-
-def _get_area_device_info(
-    coordinator: AritechCoordinator, area_number: int, area_name: str
-) -> DeviceInfo:
-    """Get device info for an area."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{coordinator.config_entry.entry_id}_area_{area_number}")},
-        name=area_name,
-        manufacturer=MANUFACTURER,
-        model="Area",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
-    )
-
-
-class AritechAreaAlarmBinarySensor(BinarySensorEntity):
-    """Binary sensor for area alarm status."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.SAFETY
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        area_number: int,
-        area_name: str,
-    ) -> None:
-        """Initialize the area alarm binary sensor."""
-        self.coordinator = coordinator
-        self._area_number = area_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_area_{area_number}_alarm"
-        self._attr_name = "Alarm"
-        self._attr_device_info = _get_area_device_info(coordinator, area_number, area_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_area_callback(
-            self._area_number, self._handle_area_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_area_update(self) -> None:
-        """Handle area state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the area is in alarm."""
-        area_state = self.coordinator.get_area_state_obj(self._area_number)
-        if not area_state:
-            return None
-        return area_state.is_alarming or area_state.is_alarm_acknowledged
-
-
-class AritechAreaTamperBinarySensor(BinarySensorEntity):
-    """Binary sensor for area tamper status."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.TAMPER
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        area_number: int,
-        area_name: str,
-    ) -> None:
-        """Initialize the area tamper binary sensor."""
-        self.coordinator = coordinator
-        self._area_number = area_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_area_{area_number}_tamper"
-        self._attr_name = "Tamper"
-        self._attr_device_info = _get_area_device_info(coordinator, area_number, area_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_area_callback(
-            self._area_number, self._handle_area_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_area_update(self) -> None:
-        """Handle area state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the area has tamper."""
-        area_state = self.coordinator.get_area_state_obj(self._area_number)
-        if not area_state:
-            return None
-        return area_state.is_tampered
-
-
-class AritechAreaFireBinarySensor(BinarySensorEntity):
-    """Binary sensor for area fire status."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.SMOKE
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        area_number: int,
-        area_name: str,
-    ) -> None:
-        """Initialize the area fire binary sensor."""
-        self.coordinator = coordinator
-        self._area_number = area_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_area_{area_number}_fire"
-        self._attr_name = "Fire"
-        self._attr_device_info = _get_area_device_info(coordinator, area_number, area_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_area_callback(
-            self._area_number, self._handle_area_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_area_update(self) -> None:
-        """Handle area state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the area has fire alarm."""
-        area_state = self.coordinator.get_area_state_obj(self._area_number)
-        if not area_state:
-            return None
-        return area_state.has_fire
-
-
-class AritechAreaPanicBinarySensor(BinarySensorEntity):
-    """Binary sensor for area panic status."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.SAFETY
-    _attr_icon = "mdi:alert"
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        area_number: int,
-        area_name: str,
-    ) -> None:
-        """Initialize the area panic binary sensor."""
-        self.coordinator = coordinator
-        self._area_number = area_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_area_{area_number}_panic"
-        self._attr_name = "Panic"
-        self._attr_device_info = _get_area_device_info(coordinator, area_number, area_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_area_callback(
-            self._area_number, self._handle_area_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_area_update(self) -> None:
-        """Handle area state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the area has panic alarm."""
-        area_state = self.coordinator.get_area_state_obj(self._area_number)
-        if not area_state:
-            return None
-        return area_state.has_panic
-
-
-# =============================================================================
-# Door Binary Sensors
-# =============================================================================
-
-
-def _get_door_device_info(
-    coordinator: AritechCoordinator, door_number: int, door_name: str
-) -> DeviceInfo:
-    """Get device info for a door (each door is its own device)."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{coordinator.config_entry.entry_id}_door_{door_number}")},
-        name=door_name,
-        manufacturer=MANUFACTURER,
-        model="Door",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
-    )
-
-
-def _get_output_device_info(
-    coordinator: AritechCoordinator, output_number: int, output_name: str
-) -> DeviceInfo:
-    """Get device info for an output (each output is its own device)."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{coordinator.config_entry.entry_id}_output_{output_number}")},
-        name=output_name,
-        manufacturer=MANUFACTURER,
-        model="Output",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
-    )
-
-
-def _get_filter_device_info(
-    coordinator: AritechCoordinator, filter_number: int, filter_name: str
-) -> DeviceInfo:
-    """Get device info for a filter (each filter is its own device)."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{coordinator.config_entry.entry_id}_filter_{filter_number}")},
-        name=filter_name,
-        manufacturer=MANUFACTURER,
-        model="Filter",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
-    )
-
-
-class AritechDoorLockBinarySensor(BinarySensorEntity):
-    """Door lock state sensor - shows if door is locked."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.LOCK
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        door_number: int,
-        door_name: str,
-    ) -> None:
-        """Initialize the door lock binary sensor."""
-        self.coordinator = coordinator
-        self._door_number = door_number
-        self._door_name = door_name
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_lock"
-        self._attr_name = "Lock"
-        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_door_callback(
-            self._door_number, self._handle_door_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_door_update(self) -> None:
-        """Handle door state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the door is unlocked (lock binary sensor: on=unlocked)."""
-        door_state = self.coordinator.get_door_state_obj(self._door_number)
-        if not door_state:
-            return None
-        # Lock sensor is ON when unlocked
-        return not door_state.is_locked
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        door_state = self.coordinator.get_door_state_obj(self._door_number)
-        if not door_state:
-            return {"door_number": self._door_number}
-
-        return {
-            "door_number": self._door_number,
-            "state_text": str(door_state),
-            "is_unlocked": door_state.is_unlocked,
-            "is_time_unlocked": door_state.is_time_unlocked,
-            "is_standard_time_unlocked": door_state.is_standard_time_unlocked,
-            "is_unlocked_period": door_state.is_unlocked_period,
-            "is_disabled": door_state.is_disabled,
-        }
-
-
-class AritechDoorOpenBinarySensor(BinarySensorEntity):
-    """Door open/close sensor."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.DOOR
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        door_number: int,
-        door_name: str,
-    ) -> None:
-        """Initialize the door open binary sensor."""
-        self.coordinator = coordinator
-        self._door_number = door_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_open"
-        self._attr_name = "Open"
-        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_door_callback(
-            self._door_number, self._handle_door_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_door_update(self) -> None:
-        """Handle door state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the door is open."""
-        door_state = self.coordinator.get_door_state_obj(self._door_number)
-        if not door_state:
-            return None
-        return door_state.is_opened
-
-
-class AritechDoorForcedBinarySensor(BinarySensorEntity):
-    """Door forced open sensor."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        door_number: int,
-        door_name: str,
-    ) -> None:
-        """Initialize the door forced binary sensor."""
-        self.coordinator = coordinator
-        self._door_number = door_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_forced"
-        self._attr_name = "Forced"
-        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_door_callback(
-            self._door_number, self._handle_door_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_door_update(self) -> None:
-        """Handle door state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the door was forced open."""
-        door_state = self.coordinator.get_door_state_obj(self._door_number)
-        if not door_state:
-            return None
-        return door_state.is_forced
-
-
-class AritechDoorOpenTooLongBinarySensor(BinarySensorEntity):
-    """Door open too long sensor."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-    _attr_icon = "mdi:timer-alert"
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        door_number: int,
-        door_name: str,
-    ) -> None:
-        """Initialize the door open too long binary sensor."""
-        self.coordinator = coordinator
-        self._door_number = door_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_open_too_long"
-        self._attr_name = "Open Too Long"
-        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_door_callback(
-            self._door_number, self._handle_door_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_door_update(self) -> None:
-        """Handle door state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the door has been open too long."""
-        door_state = self.coordinator.get_door_state_obj(self._door_number)
-        if not door_state:
-            return None
-        return door_state.is_door_open_too_long
-
-
-class AritechDoorTamperBinarySensor(BinarySensorEntity):
-    """Door reader tamper sensor."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.TAMPER
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        door_number: int,
-        door_name: str,
-    ) -> None:
-        """Initialize the door tamper binary sensor."""
-        self.coordinator = coordinator
-        self._door_number = door_number
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_door_{door_number}_tamper"
-        self._attr_name = "Tamper"
-        self._attr_device_info = _get_door_device_info(coordinator, door_number, door_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_door_callback(
-            self._door_number, self._handle_door_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_door_update(self) -> None:
-        """Handle door state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the door reader has been tampered."""
-        door_state = self.coordinator.get_door_state_obj(self._door_number)
-        if not door_state:
-            return None
-        return door_state.is_reader_tamper
-
-
-# =============================================================================
-# Filter Binary Sensors
-# =============================================================================
-
-
-class AritechFilterActiveBinarySensor(BinarySensorEntity):
-    """Filter active state sensor.
-
-    Filters are read-only entities that represent logical conditions in the panel.
-    They have a simple active/inactive state.
-    """
-
-    _attr_has_entity_name = True
-    _attr_icon = "mdi:filter"
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        filter_number: int,
-        filter_name: str,
-    ) -> None:
-        """Initialize the filter active binary sensor."""
-        self.coordinator = coordinator
-        self._filter_number = filter_number
-        self._filter_name = filter_name
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_filter_{filter_number}_active"
-        self._attr_name = "Active"
-        self._attr_device_info = _get_filter_device_info(coordinator, filter_number, filter_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_filter_callback(
-            self._filter_number, self._handle_filter_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_filter_update(self) -> None:
-        """Handle filter state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the filter is active."""
-        filter_state = self.coordinator.get_filter_state_obj(self._filter_number)
-        if not filter_state:
-            return None
-        return filter_state.is_active
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        return {
-            "filter_number": self._filter_number,
-        }
-
-
-# =============================================================================
-# Output Binary Sensors (read-only)
-# =============================================================================
-
-
-class AritechOutputActiveBinarySensor(BinarySensorEntity):
-    """Output active state sensor (read-only).
-
-    Shows the current state of an output. Outputs can be active due to
-    panel logic, schedules, or being forced on/off.
-    """
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.POWER
-    _attr_icon = "mdi:electric-switch"
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        output_number: int,
-        output_name: str,
-    ) -> None:
-        """Initialize the output active binary sensor."""
-        self.coordinator = coordinator
-        self._output_number = output_number
-        self._output_name = output_name
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_output_{output_number}_active"
-        self._attr_name = "Active"
-        self._attr_device_info = _get_output_device_info(coordinator, output_number, output_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_output_callback(
-            self._output_number, self._handle_output_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_output_update(self) -> None:
-        """Handle output state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the output is active."""
-        output_state = self.coordinator.get_output_state_obj(self._output_number)
-        if not output_state:
-            return None
-        # Output is on if either is_on or is_active is true
-        return output_state.is_on or output_state.is_active
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        output_state = self.coordinator.get_output_state_obj(self._output_number)
-        if not output_state:
-            return {"output_number": self._output_number}
-
-        return {
-            "output_number": self._output_number,
-            "is_on": output_state.is_on,
-            "is_active": output_state.is_active,
-            "is_forced": output_state.is_forced,
-            "state_text": str(output_state),
-        }
-
-
-class AritechOutputForcedBinarySensor(BinarySensorEntity):
-    """Output forced state sensor (read-only).
-
-    Shows if an output is being force controlled (overridden).
-    """
-
-    _attr_has_entity_name = True
-    _attr_icon = "mdi:lock"
-
-    def __init__(
-        self,
-        coordinator: AritechCoordinator,
-        output_number: int,
-        output_name: str,
-    ) -> None:
-        """Initialize the output forced binary sensor."""
-        self.coordinator = coordinator
-        self._output_number = output_number
-        self._output_name = output_name
-        self._unregister_callback: callable | None = None
-
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_output_{output_number}_forced"
-        self._attr_name = "Forced"
-        self._attr_device_info = _get_output_device_info(coordinator, output_number, output_name)
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
-        await super().async_added_to_hass()
-        self._unregister_callback = self.coordinator.register_output_callback(
-            self._output_number, self._handle_output_update
-        )
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity is being removed."""
-        if self._unregister_callback:
-            self._unregister_callback()
-            self._unregister_callback = None
-        await super().async_will_remove_from_hass()
-
-    @callback
-    def _handle_output_update(self) -> None:
-        """Handle output state update."""
-        self.async_write_ha_state()
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.connected
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the output is forced."""
-        output_state = self.coordinator.get_output_state_obj(self._output_number)
-        if not output_state:
-            return None
-        return output_state.is_forced
+        _LOGGER.warning("No binary sensors created")
