@@ -397,8 +397,8 @@ async def test_coordinator_force_arm(hass: HomeAssistant) -> None:
         assert coordinator.get_force_arm(1) is False
 
 
-async def test_coordinator_register_callbacks(hass: HomeAssistant) -> None:
-    """Test registering and unregistering callbacks."""
+async def test_coordinator_shutdown_flag(hass: HomeAssistant) -> None:
+    """Test that shutdown flag prevents reconnect during unload."""
     mock_client = create_mock_client()
     mock_monitor = create_mock_monitor()
     entry = create_mock_config_entry(hass)
@@ -414,21 +414,41 @@ async def test_coordinator_register_callbacks(hass: HomeAssistant) -> None:
         ),
     ):
         coordinator = AritechCoordinator(hass, entry)
+        await coordinator.async_connect()
 
-        callback_called = False
+        assert coordinator._shutting_down is False
 
-        def test_callback() -> None:
-            nonlocal callback_called
-            callback_called = True
+        await coordinator.async_disconnect()
 
-        # Register callback
-        unregister = coordinator.register_area_callback(1, test_callback)
-        assert 1 in coordinator._area_callbacks
-        assert test_callback in coordinator._area_callbacks[1]
+        assert coordinator._shutting_down is True
+        assert coordinator.connected is False
 
-        # Unregister callback
-        unregister()
-        assert test_callback not in coordinator._area_callbacks[1]
+
+async def test_coordinator_connection_lost_sets_disconnected(hass: HomeAssistant) -> None:
+    """Test that connection loss immediately marks coordinator as disconnected."""
+    mock_client = create_mock_client()
+    mock_monitor = create_mock_monitor()
+    entry = create_mock_config_entry(hass)
+
+    with (
+        patch(
+            "aritech_ats.coordinator.AritechClient",
+            return_value=mock_client,
+        ),
+        patch(
+            "aritech_ats.coordinator.AritechMonitor",
+            return_value=mock_monitor,
+        ),
+    ):
+        coordinator = AritechCoordinator(hass, entry)
+        await coordinator.async_connect()
+
+        assert coordinator.connected is True
+
+        # Simulate connection loss callback on event loop
+        coordinator._handle_connection_lost()
+
+        assert coordinator.connected is False
 
 
 async def test_coordinator_command_not_connected(hass: HomeAssistant) -> None:

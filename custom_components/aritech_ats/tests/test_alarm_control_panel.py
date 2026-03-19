@@ -46,9 +46,9 @@ def create_mock_coordinator() -> MagicMock:
 class TestGetAlarmState:
     """Tests for _get_alarm_state function."""
 
-    def test_none_returns_disarmed(self) -> None:
-        """Test that None state returns disarmed."""
-        assert _get_alarm_state(None) == AlarmControlPanelState.DISARMED
+    def test_none_returns_none(self) -> None:
+        """Test that None state returns None (unknown)."""
+        assert _get_alarm_state(None) is None
 
     def test_unset_returns_disarmed(self) -> None:
         """Test that unset area returns disarmed."""

@@ -13,6 +13,14 @@ from .coordinator import AritechCoordinator
 REDACT_KEYS = {CONF_HOST, CONF_ENCRYPTION_KEY, CONF_PIN_CODE, CONF_USERNAME, CONF_PASSWORD}
 
 
+def _redact_entity_names(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Redact entity names from a list of entity dicts."""
+    return [
+        {**entity, "name": "**REDACTED**"} if "name" in entity else entity
+        for entity in entities
+    ]
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -41,10 +49,10 @@ async def async_get_config_entry_diagnostics(
             "doors": len(coordinator.get_doors()),
             "filters": len(coordinator.get_filters()),
         },
-        "areas": coordinator.get_areas(),
-        "zones": coordinator.get_zones(),
-        "outputs": coordinator.get_outputs(),
-        "triggers": coordinator.get_triggers(),
-        "doors": coordinator.get_doors(),
-        "filters": coordinator.get_filters(),
+        "areas": _redact_entity_names(coordinator.get_areas()),
+        "zones": _redact_entity_names(coordinator.get_zones()),
+        "outputs": _redact_entity_names(coordinator.get_outputs()),
+        "triggers": _redact_entity_names(coordinator.get_triggers()),
+        "doors": _redact_entity_names(coordinator.get_doors()),
+        "filters": _redact_entity_names(coordinator.get_filters()),
     }

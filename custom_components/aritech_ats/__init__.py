@@ -6,7 +6,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
 
 from .const import DOMAIN, CONF_PANEL_TYPE, PANEL_TYPE_X500
@@ -54,6 +54,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_connect()
     except Exception as err:
         _LOGGER.error("Failed to connect to Aritech panel: %s", err)
+        err_str = str(err).lower()
+        if any(kw in err_str for kw in ("login", "auth", "credential", "password", "pin")):
+            raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
         raise ConfigEntryNotReady(f"Failed to connect: {err}") from err
 
     hass.data.setdefault(DOMAIN, {})

@@ -48,7 +48,7 @@ def _get_alarm_state(area_state: AreaState | None) -> AlarmControlPanelState | N
     if area_state.is_unset:
         return AlarmControlPanelState.DISARMED
 
-    return AlarmControlPanelState.DISARMED
+    return None
 
 
 async def async_setup_entry(

@@ -28,7 +28,6 @@ from .const import (
     PANEL_TYPE_X500,
     PANEL_TYPE_X700,
     DEFAULT_PORT,
-    DEFAULT_ENCRYPTION_KEY,
     CONNECT_TIMEOUT,
     INITIALIZE_TIMEOUT,
 )
@@ -40,7 +39,7 @@ CONNECTION_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
         vol.Required(CONF_PORT, default=DEFAULT_PORT): cv.port,
-        vol.Required(CONF_ENCRYPTION_KEY, default=DEFAULT_ENCRYPTION_KEY): TextSelector(
+        vol.Required(CONF_ENCRYPTION_KEY): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
         ),
     }

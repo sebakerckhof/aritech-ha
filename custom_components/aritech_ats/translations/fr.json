@@ -7,23 +7,45 @@
         "data": {
           "host": "Hôte",
           "port": "Port",
-          "encryption_key": "Clé de chiffrement (24 chiffres)",
+          "encryption_key": "Clé de chiffrement (24 chiffres)"
+        },
+        "data_description": {
+          "encryption_key": "La clé de chiffrement à 24 chiffres de votre centrale d'alarme"
+        }
+      },
+      "x500_auth": {
+        "title": "Authentification auprès de {panel_name}",
+        "description": "Centrale détectée : {panel_model}. Entrez votre code PIN pour vous authentifier.",
+        "data": {
           "pin_code": "Code PIN"
         },
         "data_description": {
-          "encryption_key": "La clé de chiffrement à 24 chiffres de votre centrale d'alarme",
           "pin_code": "Votre code PIN de la centrale d'alarme"
+        }
+      },
+      "x700_auth": {
+        "title": "Authentification auprès de {panel_name}",
+        "description": "Centrale détectée : {panel_model}. Entrez votre nom d'utilisateur et mot de passe pour vous authentifier.",
+        "data": {
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe"
+        },
+        "data_description": {
+          "username": "Votre nom d'utilisateur du panneau",
+          "password": "Votre mot de passe du panneau"
         }
       }
     },
     "error": {
       "cannot_connect": "Impossible de se connecter à la centrale d'alarme",
-      "invalid_auth": "Code PIN invalide",
+      "invalid_auth": "Identifiants invalides",
       "invalid_input": "Configuration invalide (vérifiez le format de la clé de chiffrement)",
+      "invalid_pin": "Le code PIN ne doit contenir que des chiffres",
       "unknown": "Erreur inattendue"
     },
     "abort": {
-      "already_configured": "Cette centrale d'alarme est déjà configurée"
+      "already_configured": "Cette centrale d'alarme est déjà configurée",
+      "no_options": "Cette intégration n'a pas d'options configurables"
     }
   }
 }

@@ -7,23 +7,45 @@
         "data": {
           "host": "主机",
           "port": "端口",
-          "encryption_key": "加密密钥（24位数字）",
+          "encryption_key": "加密密钥（24位数字）"
+        },
+        "data_description": {
+          "encryption_key": "报警面板的24位数字加密密钥"
+        }
+      },
+      "x500_auth": {
+        "title": "验证 {panel_name}",
+        "description": "检测到面板：{panel_model}。请输入您的PIN码进行验证。",
+        "data": {
           "pin_code": "PIN码"
         },
         "data_description": {
-          "encryption_key": "报警面板的24位数字加密密钥",
           "pin_code": "您的报警面板PIN码"
+        }
+      },
+      "x700_auth": {
+        "title": "验证 {panel_name}",
+        "description": "检测到面板：{panel_model}。请输入您的用户名和密码进行验证。",
+        "data": {
+          "username": "用户名",
+          "password": "密码"
+        },
+        "data_description": {
+          "username": "您的面板用户名",
+          "password": "您的面板密码"
         }
       }
     },
     "error": {
       "cannot_connect": "无法连接到报警面板",
-      "invalid_auth": "PIN码无效",
+      "invalid_auth": "凭据无效",
       "invalid_input": "配置无效（请检查加密密钥格式）",
+      "invalid_pin": "PIN码只能包含数字",
       "unknown": "意外错误"
     },
     "abort": {
-      "already_configured": "此报警面板已配置"
+      "already_configured": "此报警面板已配置",
+      "no_options": "此集成没有可配置的选项"
     }
   }
 }

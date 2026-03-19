@@ -72,6 +72,7 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         self._monitor: AritechMonitor | None = None
         self._data = AritechData()
         self._connected = False
+        self._shutting_down = False
         self._reconnect_task: asyncio.Task | None = None
 
         # Reconnection backoff settings
@@ -169,6 +170,8 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
             _from_reconnect: True when called from within the reconnect task,
                 to avoid the task trying to cancel and await itself.
         """
+        self._shutting_down = True
+
         # Cancel any pending reconnect task (but not if we're inside it)
         if not _from_reconnect and self._reconnect_task and not self._reconnect_task.done():
             self._reconnect_task.cancel()
@@ -196,28 +199,8 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
 
         @self._monitor.on_initialized
         def handle_initialized(event: InitializedEvent) -> None:
-            """Handle initialization event with all entity data."""
-            _LOGGER.debug(
-                "Initialized: %d zones, %d areas, %d outputs, %d triggers, %d doors, %d filters",
-                len(event.zones), len(event.areas), len(event.outputs),
-                len(event.triggers), len(event.doors), len(event.filters),
-            )
-
-            self._data.zones = [{"number": z.number, "name": z.name} for z in event.zones]
-            self._data.areas = [{"number": a.number, "name": a.name} for a in event.areas]
-            self._data.outputs = [{"number": o.number, "name": o.name} for o in event.outputs]
-            self._data.triggers = [{"number": t.number, "name": t.name} for t in event.triggers]
-            self._data.doors = [{"number": d.number, "name": d.name} for d in event.doors]
-            self._data.filters = [{"number": f.number, "name": f.name} for f in event.filters]
-
-            self._data.zone_states = event.zone_states
-            self._data.area_states = event.area_states
-            self._data.output_states = event.output_states
-            self._data.trigger_states = event.trigger_states
-            self._data.door_states = event.door_states
-            self._data.filter_states = event.filter_states
-
-            self.async_set_updated_data(self._data)
+            """Handle initialization event — dispatch to event loop for thread safety."""
+            self.hass.loop.call_soon_threadsafe(self._handle_initialized, event)
 
         # State change callbacks — use call_soon_threadsafe because the
         # aritech_client library may invoke these from a background thread.
@@ -260,13 +243,47 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         @self._monitor.on_error
         def handle_error(error: Exception) -> None:
             _LOGGER.error("Aritech monitor error: %s", error)
-            self.hass.loop.call_soon_threadsafe(self._schedule_reconnect)
+            self.hass.loop.call_soon_threadsafe(self._handle_connection_lost)
 
         if self._client:
             @self._client.on_connection_lost
             def handle_connection_lost() -> None:
                 _LOGGER.warning("Aritech client connection lost detected")
-                self.hass.loop.call_soon_threadsafe(self._schedule_reconnect)
+                self.hass.loop.call_soon_threadsafe(self._handle_connection_lost)
+
+    @callback
+    def _handle_initialized(self, event: InitializedEvent) -> None:
+        """Handle initialization event with all entity data."""
+        _LOGGER.debug(
+            "Initialized: %d zones, %d areas, %d outputs, %d triggers, %d doors, %d filters",
+            len(event.zones), len(event.areas), len(event.outputs),
+            len(event.triggers), len(event.doors), len(event.filters),
+        )
+
+        self._data.zones = [{"number": z.number, "name": z.name} for z in event.zones]
+        self._data.areas = [{"number": a.number, "name": a.name} for a in event.areas]
+        self._data.outputs = [{"number": o.number, "name": o.name} for o in event.outputs]
+        self._data.triggers = [{"number": t.number, "name": t.name} for t in event.triggers]
+        self._data.doors = [{"number": d.number, "name": d.name} for d in event.doors]
+        self._data.filters = [{"number": f.number, "name": f.name} for f in event.filters]
+
+        self._data.zone_states = event.zone_states
+        self._data.area_states = event.area_states
+        self._data.output_states = event.output_states
+        self._data.trigger_states = event.trigger_states
+        self._data.door_states = event.door_states
+        self._data.filter_states = event.filter_states
+
+        self.async_set_updated_data(self._data)
+
+    @callback
+    def _handle_connection_lost(self) -> None:
+        """Handle connection loss — mark disconnected and schedule reconnect."""
+        if self._shutting_down:
+            return
+        self._connected = False
+        self.async_set_updated_data(self._data)
+        self._schedule_reconnect()
 
     @callback
     def _handle_state_change(
@@ -294,6 +311,8 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
     @callback
     def _schedule_reconnect(self) -> None:
         """Schedule a reconnection attempt with exponential backoff."""
+        if self._shutting_down:
+            return
         if self._reconnect_task and not self._reconnect_task.done():
             return
 

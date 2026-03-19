@@ -66,8 +66,11 @@ class TestGuessDeviceClass:
 
     def test_smoke_returns_smoke(self) -> None:
         """Test smoke in name returns smoke class."""
-        # Note: "Smoke Detector" would match "detector" -> MOTION first
         assert guess_device_class("Smoke Alarm") == BinarySensorDeviceClass.SMOKE
+
+    def test_smoke_detector_returns_smoke(self) -> None:
+        """Test Smoke Detector returns smoke, not motion."""
+        assert guess_device_class("Smoke Detector") == BinarySensorDeviceClass.SMOKE
 
     def test_glass_returns_vibration(self) -> None:
         """Test glass break in name returns vibration class."""
@@ -75,8 +78,11 @@ class TestGuessDeviceClass:
 
     def test_garage_returns_garage_door(self) -> None:
         """Test garage in name returns garage door class."""
-        # Note: "Garage Door" matches "door" -> DOOR first, use just "Garage"
         assert guess_device_class("Garage") == BinarySensorDeviceClass.GARAGE_DOOR
+
+    def test_garage_door_returns_garage_door(self) -> None:
+        """Test Garage Door returns garage_door, not door."""
+        assert guess_device_class("Garage Door") == BinarySensorDeviceClass.GARAGE_DOOR
 
     def test_tamper_returns_tamper(self) -> None:
         """Test tamper in name returns tamper class."""
@@ -92,17 +98,27 @@ class TestGuessDeviceClass:
 
     def test_heat_returns_heat(self) -> None:
         """Test heat in name returns heat class."""
-        # Note: "Heat Detector" would match "detector" -> MOTION first
         assert guess_device_class("Heat Sensor") == BinarySensorDeviceClass.HEAT
+
+    def test_heat_detector_returns_heat(self) -> None:
+        """Test Heat Detector returns heat, not motion."""
+        assert guess_device_class("Heat Detector") == BinarySensorDeviceClass.HEAT
 
     def test_gas_returns_gas(self) -> None:
         """Test gas in name returns gas class."""
-        # Note: "Gas Detector" would match "detector" -> MOTION first
         assert guess_device_class("Gas Sensor") == BinarySensorDeviceClass.GAS
 
-    def test_unknown_defaults_to_motion(self) -> None:
-        """Test unknown name defaults to motion class."""
-        assert guess_device_class("Zone 1") == BinarySensorDeviceClass.MOTION
+    def test_gas_detector_returns_gas(self) -> None:
+        """Test Gas Detector returns gas, not motion."""
+        assert guess_device_class("Gas Detector") == BinarySensorDeviceClass.GAS
+
+    def test_gas_not_in_garage(self) -> None:
+        """Test 'gas' word boundary doesn't match 'garage'."""
+        assert guess_device_class("Garage") == BinarySensorDeviceClass.GARAGE_DOOR
+
+    def test_unknown_returns_none(self) -> None:
+        """Test unknown name returns None."""
+        assert guess_device_class("Zone 1") is None
 
     def test_case_insensitive(self) -> None:
         """Test matching is case insensitive."""
@@ -123,8 +139,7 @@ class TestZoneActiveBinarySensor:
             zone_name="Front Door",
         )
 
-        assert sensor._zone_number == 1
-        assert sensor._zone_name == "Front Door"
+        assert sensor._number == 1
         assert sensor._attr_unique_id == "test_entry_id_zone_1_active"
         assert sensor._attr_name == "Active"
         assert sensor._attr_device_class == BinarySensorDeviceClass.DOOR

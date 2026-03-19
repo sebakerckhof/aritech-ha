@@ -9,7 +9,7 @@ _custom_components_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_custom_components_dir))
 
 from collections.abc import Generator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -172,6 +172,41 @@ class MockTriggerState:
 
 
 @dataclass
+class MockDoorState:
+    """Mock DoorState from aritech_client."""
+
+    is_locked: bool = True
+    is_unlocked: bool = False
+    is_opened: bool = False
+    is_forced: bool = False
+    is_door_open_too_long: bool = False
+    is_reader_tamper: bool = False
+    is_time_unlocked: bool = False
+    is_standard_time_unlocked: bool = False
+    is_unlocked_period: bool = False
+    is_disabled: bool = False
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        if self.is_locked:
+            return "Locked"
+        if self.is_unlocked:
+            return "Unlocked"
+        return "Unknown"
+
+
+@dataclass
+class MockFilterState:
+    """Mock FilterState from aritech_client."""
+
+    is_active: bool = False
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return "Active" if self.is_active else "Inactive"
+
+
+@dataclass
 class MockNamedItem:
     """Mock NamedItem from aritech_client."""
 
@@ -187,10 +222,14 @@ class MockInitializedEvent:
     areas: list[MockNamedItem]
     outputs: list[MockNamedItem]
     triggers: list[MockNamedItem]
-    zone_states: dict[int, dict[str, Any]]
-    area_states: dict[int, dict[str, Any]]
-    output_states: dict[int, dict[str, Any]]
-    trigger_states: dict[int, dict[str, Any]]
+    doors: list[MockNamedItem] = field(default_factory=list)
+    filters: list[MockNamedItem] = field(default_factory=list)
+    zone_states: dict[int, dict[str, Any]] = field(default_factory=dict)
+    area_states: dict[int, dict[str, Any]] = field(default_factory=dict)
+    output_states: dict[int, dict[str, Any]] = field(default_factory=dict)
+    trigger_states: dict[int, dict[str, Any]] = field(default_factory=dict)
+    door_states: dict[int, dict[str, Any]] = field(default_factory=dict)
+    filter_states: dict[int, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
@@ -213,6 +252,7 @@ def create_mock_client(is_x700: bool = False) -> MagicMock:
     client.connect = AsyncMock()
     client.disconnect = AsyncMock()
     client.initialize = AsyncMock()
+    client.get_description = AsyncMock()
     client.arm_area = AsyncMock()
     client.disarm_area = AsyncMock()
     client.inhibit_zone = AsyncMock()
@@ -221,6 +261,11 @@ def create_mock_client(is_x700: bool = False) -> MagicMock:
     client.deactivate_output = AsyncMock()
     client.activate_trigger = AsyncMock()
     client.deactivate_trigger = AsyncMock()
+    client.lock_door = AsyncMock()
+    client.unlock_door = AsyncMock()
+    client.unlock_door_standard_time = AsyncMock()
+    client.enable_door = AsyncMock()
+    client.disable_door = AsyncMock()
 
     # Panel info
     client.panel_model = "ATS4700" if is_x700 else "ATS4500"
@@ -243,6 +288,8 @@ def create_mock_monitor() -> MagicMock:
     monitor.on_area_changed = MagicMock(side_effect=lambda fn: fn)
     monitor.on_output_changed = MagicMock(side_effect=lambda fn: fn)
     monitor.on_trigger_changed = MagicMock(side_effect=lambda fn: fn)
+    monitor.on_door_changed = MagicMock(side_effect=lambda fn: fn)
+    monitor.on_filter_changed = MagicMock(side_effect=lambda fn: fn)
     monitor.on_error = MagicMock(side_effect=lambda fn: fn)
 
     return monitor
@@ -267,6 +314,12 @@ def create_mock_initialized_event() -> MockInitializedEvent:
         triggers=[
             MockNamedItem(1, "Panic Button"),
         ],
+        doors=[
+            MockNamedItem(1, "Main Entrance"),
+        ],
+        filters=[
+            MockNamedItem(1, "After Hours"),
+        ],
         zone_states={
             1: {"state": MockZoneState()},
             2: {"state": MockZoneState()},
@@ -282,6 +335,12 @@ def create_mock_initialized_event() -> MockInitializedEvent:
         },
         trigger_states={
             1: {"state": MockTriggerState()},
+        },
+        door_states={
+            1: {"state": MockDoorState()},
+        },
+        filter_states={
+            1: {"state": MockFilterState()},
         },
     )
 

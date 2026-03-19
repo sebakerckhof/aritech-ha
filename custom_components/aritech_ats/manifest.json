@@ -8,6 +8,6 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/sebakerckhof/aritech-ha/issues",
   "loggers": ["aritech_client"],
-  "requirements": ["aritech-client>=0.5.2"],
+  "requirements": ["aritech-client>=0.5.2,<1.0"],
   "version": "0.6.3"
 }

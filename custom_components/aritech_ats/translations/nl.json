@@ -7,23 +7,45 @@
         "data": {
           "host": "Host",
           "port": "Poort",
-          "encryption_key": "Encryptiesleutel (24 cijfers)",
+          "encryption_key": "Encryptiesleutel (24 cijfers)"
+        },
+        "data_description": {
+          "encryption_key": "De 24-cijferige encryptiesleutel van uw alarmcentrale"
+        }
+      },
+      "x500_auth": {
+        "title": "Authenticeren bij {panel_name}",
+        "description": "Paneel gedetecteerd: {panel_model}. Voer uw PIN-code in om te authenticeren.",
+        "data": {
           "pin_code": "PIN-code"
         },
         "data_description": {
-          "encryption_key": "De 24-cijferige encryptiesleutel van uw alarmcentrale",
           "pin_code": "Uw PIN-code van de alarmcentrale"
+        }
+      },
+      "x700_auth": {
+        "title": "Authenticeren bij {panel_name}",
+        "description": "Paneel gedetecteerd: {panel_model}. Voer uw gebruikersnaam en wachtwoord in om te authenticeren.",
+        "data": {
+          "username": "Gebruikersnaam",
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "username": "Uw gebruikersnaam van het paneel",
+          "password": "Uw wachtwoord van het paneel"
         }
       }
     },
     "error": {
       "cannot_connect": "Kan geen verbinding maken met de alarmcentrale",
-      "invalid_auth": "Ongeldige PIN-code",
+      "invalid_auth": "Ongeldige inloggegevens",
       "invalid_input": "Ongeldige configuratie (controleer het formaat van de encryptiesleutel)",
+      "invalid_pin": "PIN-code mag alleen cijfers bevatten",
       "unknown": "Onverwachte fout"
     },
     "abort": {
-      "already_configured": "Deze alarmcentrale is al geconfigureerd"
+      "already_configured": "Deze alarmcentrale is al geconfigureerd",
+      "no_options": "Deze integratie heeft geen configureerbare opties"
     }
   }
 }

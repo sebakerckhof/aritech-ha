@@ -35,7 +35,7 @@ The Classic 1000 series panels use a legacy protocol that is fundamentally diffe
 - Panic - panic alarm active
 
 **Door sensors** (per door device):
-- Lock - door lock state (ON = locked)
+- Lock - door lock state (ON = unlocked)
 - Open - door open/closed state
 - Forced - door was forced open
 - Open Too Long - door has been open too long

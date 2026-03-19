@@ -22,18 +22,18 @@ _LOGGER = logging.getLogger(__name__)
 
 # Map zone name patterns to device classes
 ZONE_NAME_DEVICE_CLASS_PATTERNS: list[tuple[str, BinarySensorDeviceClass]] = [
-    (r"(?i)(pir|motion|beweging|detector)", BinarySensorDeviceClass.MOTION),
-    (r"(?i)(door|deur|entrance|entry|ingang)", BinarySensorDeviceClass.DOOR),
-    (r"(?i)(window|raam|venster)", BinarySensorDeviceClass.WINDOW),
     (r"(?i)(smoke|rook|brand)", BinarySensorDeviceClass.SMOKE),
+    (r"(?i)(heat|warmte|temp)", BinarySensorDeviceClass.HEAT),
+    (r"(?i)\bgas\b", BinarySensorDeviceClass.GAS),
+    (r"(?i)(co2|carbon)", BinarySensorDeviceClass.CO),
+    (r"(?i)(pir|motion|beweging|detector)", BinarySensorDeviceClass.MOTION),
+    (r"(?i)(window|raam|venster)", BinarySensorDeviceClass.WINDOW),
     (r"(?i)(glass|glas|break)", BinarySensorDeviceClass.VIBRATION),
     (r"(?i)(garage|poort|gate)", BinarySensorDeviceClass.GARAGE_DOOR),
+    (r"(?i)(door|deur|entrance|entry|ingang)", BinarySensorDeviceClass.DOOR),
     (r"(?i)(tamper|sabotage)", BinarySensorDeviceClass.TAMPER),
     (r"(?i)(panic|paniek|overval)", BinarySensorDeviceClass.SAFETY),
     (r"(?i)(water|leak|lek)", BinarySensorDeviceClass.MOISTURE),
-    (r"(?i)(heat|warmte|temp)", BinarySensorDeviceClass.HEAT),
-    (r"(?i)(gas)", BinarySensorDeviceClass.GAS),
-    (r"(?i)(co2|carbon)", BinarySensorDeviceClass.CO),
 ]
 
 

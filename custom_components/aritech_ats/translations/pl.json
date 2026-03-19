@@ -7,23 +7,45 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "encryption_key": "Klucz szyfrowania (24 cyfry)",
+          "encryption_key": "Klucz szyfrowania (24 cyfry)"
+        },
+        "data_description": {
+          "encryption_key": "24-cyfrowy klucz szyfrowania centrali alarmowej"
+        }
+      },
+      "x500_auth": {
+        "title": "Uwierzytelnianie w {panel_name}",
+        "description": "Wykryto panel: {panel_model}. Wprowadź kod PIN, aby się uwierzytelnić.",
+        "data": {
           "pin_code": "Kod PIN"
         },
         "data_description": {
-          "encryption_key": "24-cyfrowy klucz szyfrowania centrali alarmowej",
           "pin_code": "Kod PIN centrali alarmowej"
+        }
+      },
+      "x700_auth": {
+        "title": "Uwierzytelnianie w {panel_name}",
+        "description": "Wykryto panel: {panel_model}. Wprowadź nazwę użytkownika i hasło, aby się uwierzytelnić.",
+        "data": {
+          "username": "Nazwa użytkownika",
+          "password": "Hasło"
+        },
+        "data_description": {
+          "username": "Nazwa użytkownika panelu",
+          "password": "Hasło panelu"
         }
       }
     },
     "error": {
       "cannot_connect": "Nie można połączyć się z centralą alarmową",
-      "invalid_auth": "Nieprawidłowy kod PIN",
+      "invalid_auth": "Nieprawidłowe dane logowania",
       "invalid_input": "Nieprawidłowa konfiguracja (sprawdź format klucza szyfrowania)",
+      "invalid_pin": "Kod PIN może zawierać tylko cyfry",
       "unknown": "Nieoczekiwany błąd"
     },
     "abort": {
-      "already_configured": "Ta centrala alarmowa jest już skonfigurowana"
+      "already_configured": "Ta centrala alarmowa jest już skonfigurowana",
+      "no_options": "Ta integracja nie ma konfigurowalnych opcji"
     }
   }
 }

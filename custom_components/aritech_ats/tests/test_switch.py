@@ -17,12 +17,13 @@ from homeassistant.core import HomeAssistant
 
 from aritech_ats.switch import (
     AritechZoneInhibitSwitch,
-    AritechOutputSwitch,
     AritechTriggerSwitch,
     AritechForceArmSwitch,
+    AritechDoorEnableSwitch,
+    AritechDoorLockSwitch,
 )
 
-from .conftest import MockZoneState, MockOutputState, MockTriggerState
+from .conftest import MockZoneState, MockOutputState, MockTriggerState, MockDoorState
 
 
 def create_mock_coordinator() -> MagicMock:
@@ -41,12 +42,17 @@ def create_mock_coordinator() -> MagicMock:
     coordinator.get_zone_state_obj = MagicMock(return_value=MockZoneState())
     coordinator.get_output_state_obj = MagicMock(return_value=MockOutputState())
     coordinator.get_trigger_state_obj = MagicMock(return_value=MockTriggerState())
+    coordinator.get_door_state_obj = MagicMock(return_value=MockDoorState())
     coordinator.async_inhibit_zone = AsyncMock()
     coordinator.async_uninhibit_zone = AsyncMock()
     coordinator.async_activate_output = AsyncMock()
     coordinator.async_deactivate_output = AsyncMock()
     coordinator.async_activate_trigger = AsyncMock()
     coordinator.async_deactivate_trigger = AsyncMock()
+    coordinator.async_lock_door = AsyncMock()
+    coordinator.async_unlock_door = AsyncMock()
+    coordinator.async_enable_door = AsyncMock()
+    coordinator.async_disable_door = AsyncMock()
     coordinator.set_force_arm = MagicMock()
     return coordinator
 
@@ -168,108 +174,149 @@ class TestZoneInhibitSwitch:
         assert "state_text" in attrs
 
 
-class TestOutputSwitch:
-    """Tests for AritechOutputSwitch."""
+class TestDoorEnableSwitch:
+    """Tests for AritechDoorEnableSwitch."""
 
     def test_entity_attributes(self) -> None:
         """Test entity attributes are set correctly."""
         coordinator = create_mock_coordinator()
 
-        switch = AritechOutputSwitch(
+        switch = AritechDoorEnableSwitch(
             coordinator=coordinator,
-            output_number=1,
-            output_name="Siren",
+            door_number=1,
+            door_name="Main Entrance",
         )
 
-        assert switch._attr_unique_id == "test_entry_id_output_1"
-        assert switch._attr_name == "Switch"
-        assert switch._attr_device_class == SwitchDeviceClass.OUTLET
-        assert switch._attr_icon == "mdi:electric-switch"
+        assert switch._attr_unique_id == "test_entry_id_door_1_enable"
+        assert switch._attr_name == "Enabled"
+        assert switch._attr_device_class == SwitchDeviceClass.SWITCH
+        assert switch._attr_icon == "mdi:door"
 
-    def test_is_on_when_output_on(self) -> None:
-        """Test is_on returns True when output is on."""
+    def test_is_on_when_enabled(self) -> None:
+        """Test is_on returns True when door is enabled."""
         coordinator = create_mock_coordinator()
-        coordinator.get_output_state_obj.return_value = MockOutputState(is_on=True)
+        coordinator.get_door_state_obj.return_value = MockDoorState(is_disabled=False)
 
-        switch = AritechOutputSwitch(
+        switch = AritechDoorEnableSwitch(
             coordinator=coordinator,
-            output_number=1,
-            output_name="Siren",
+            door_number=1,
+            door_name="Main Entrance",
         )
 
         assert switch.is_on is True
 
-    def test_is_on_when_output_active(self) -> None:
-        """Test is_on returns True when output is active."""
+    def test_is_off_when_disabled(self) -> None:
+        """Test is_on returns False when door is disabled."""
         coordinator = create_mock_coordinator()
-        coordinator.get_output_state_obj.return_value = MockOutputState(is_active=True)
+        coordinator.get_door_state_obj.return_value = MockDoorState(is_disabled=True)
 
-        switch = AritechOutputSwitch(
+        switch = AritechDoorEnableSwitch(
             coordinator=coordinator,
-            output_number=1,
-            output_name="Siren",
-        )
-
-        assert switch.is_on is True
-
-    def test_is_off_when_output_off(self) -> None:
-        """Test is_on returns False when output is off."""
-        coordinator = create_mock_coordinator()
-        coordinator.get_output_state_obj.return_value = MockOutputState(
-            is_on=False, is_active=False
-        )
-
-        switch = AritechOutputSwitch(
-            coordinator=coordinator,
-            output_number=1,
-            output_name="Siren",
+            door_number=1,
+            door_name="Main Entrance",
         )
 
         assert switch.is_on is False
 
     @pytest.mark.asyncio
-    async def test_turn_on_activates_output(self) -> None:
-        """Test turning on activates the output."""
+    async def test_turn_on_enables_door(self) -> None:
+        """Test turning on enables the door."""
         coordinator = create_mock_coordinator()
 
-        switch = AritechOutputSwitch(
+        switch = AritechDoorEnableSwitch(
             coordinator=coordinator,
-            output_number=1,
-            output_name="Siren",
+            door_number=1,
+            door_name="Main Entrance",
         )
 
         await switch.async_turn_on()
-        coordinator.async_activate_output.assert_called_once_with(1)
+        coordinator.async_enable_door.assert_called_once_with(1)
 
     @pytest.mark.asyncio
-    async def test_turn_off_deactivates_output(self) -> None:
-        """Test turning off deactivates the output."""
+    async def test_turn_off_disables_door(self) -> None:
+        """Test turning off disables the door."""
         coordinator = create_mock_coordinator()
 
-        switch = AritechOutputSwitch(
+        switch = AritechDoorEnableSwitch(
             coordinator=coordinator,
-            output_number=1,
-            output_name="Siren",
+            door_number=1,
+            door_name="Main Entrance",
         )
 
         await switch.async_turn_off()
-        coordinator.async_deactivate_output.assert_called_once_with(1)
+        coordinator.async_disable_door.assert_called_once_with(1)
 
-    def test_extra_state_attributes(self) -> None:
-        """Test extra state attributes are returned."""
+
+class TestDoorLockSwitch:
+    """Tests for AritechDoorLockSwitch."""
+
+    def test_entity_attributes(self) -> None:
+        """Test entity attributes are set correctly."""
         coordinator = create_mock_coordinator()
-        output_state = MockOutputState(is_on=True, is_forced=False)
-        coordinator.get_output_state_obj.return_value = output_state
 
-        switch = AritechOutputSwitch(
+        switch = AritechDoorLockSwitch(
             coordinator=coordinator,
-            output_number=1,
-            output_name="Siren",
+            door_number=1,
+            door_name="Main Entrance",
         )
 
-        attrs = switch.extra_state_attributes
-        assert attrs["output_number"] == 1
-        assert attrs["is_forced"] is False
+        assert switch._attr_unique_id == "test_entry_id_door_1_lock"
+        assert switch._attr_name == "Unlocked"
+        assert switch._attr_device_class == SwitchDeviceClass.SWITCH
+
+    def test_is_on_when_unlocked(self) -> None:
+        """Test is_on returns True when door is unlocked."""
+        coordinator = create_mock_coordinator()
+        coordinator.get_door_state_obj.return_value = MockDoorState(is_locked=False)
+
+        switch = AritechDoorLockSwitch(
+            coordinator=coordinator,
+            door_number=1,
+            door_name="Main Entrance",
+        )
+
+        assert switch.is_on is True
+
+    def test_is_off_when_locked(self) -> None:
+        """Test is_on returns False when door is locked."""
+        coordinator = create_mock_coordinator()
+        coordinator.get_door_state_obj.return_value = MockDoorState(is_locked=True)
+
+        switch = AritechDoorLockSwitch(
+            coordinator=coordinator,
+            door_number=1,
+            door_name="Main Entrance",
+        )
+
+        assert switch.is_on is False
+
+    @pytest.mark.asyncio
+    async def test_turn_on_unlocks_door(self) -> None:
+        """Test turning on unlocks the door."""
+        coordinator = create_mock_coordinator()
+
+        switch = AritechDoorLockSwitch(
+            coordinator=coordinator,
+            door_number=1,
+            door_name="Main Entrance",
+        )
+
+        await switch.async_turn_on()
+        coordinator.async_unlock_door.assert_called_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_turn_off_locks_door(self) -> None:
+        """Test turning off locks the door."""
+        coordinator = create_mock_coordinator()
+
+        switch = AritechDoorLockSwitch(
+            coordinator=coordinator,
+            door_number=1,
+            door_name="Main Entrance",
+        )
+
+        await switch.async_turn_off()
+        coordinator.async_lock_door.assert_called_once_with(1)
 
 
 class TestTriggerSwitch:

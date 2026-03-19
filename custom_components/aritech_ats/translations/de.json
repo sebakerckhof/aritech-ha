@@ -7,23 +7,45 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "encryption_key": "Verschlüsselungsschlüssel (24 Ziffern)",
+          "encryption_key": "Verschlüsselungsschlüssel (24 Ziffern)"
+        },
+        "data_description": {
+          "encryption_key": "Der 24-stellige Verschlüsselungsschlüssel für Ihre Alarmanlage"
+        }
+      },
+      "x500_auth": {
+        "title": "Authentifizierung bei {panel_name}",
+        "description": "Panel erkannt: {panel_model}. Geben Sie Ihren PIN-Code zur Authentifizierung ein.",
+        "data": {
           "pin_code": "PIN-Code"
         },
         "data_description": {
-          "encryption_key": "Der 24-stellige Verschlüsselungsschlüssel für Ihre Alarmanlage",
           "pin_code": "Ihr PIN-Code für die Alarmanlage"
+        }
+      },
+      "x700_auth": {
+        "title": "Authentifizierung bei {panel_name}",
+        "description": "Panel erkannt: {panel_model}. Geben Sie Ihren Benutzernamen und Ihr Passwort zur Authentifizierung ein.",
+        "data": {
+          "username": "Benutzername",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "username": "Ihr Panel-Benutzername",
+          "password": "Ihr Panel-Passwort"
         }
       }
     },
     "error": {
       "cannot_connect": "Verbindung zur Alarmanlage fehlgeschlagen",
-      "invalid_auth": "Ungültiger PIN-Code",
+      "invalid_auth": "Ungültige Anmeldedaten",
       "invalid_input": "Ungültige Konfiguration (Verschlüsselungsschlüssel-Format prüfen)",
+      "invalid_pin": "PIN-Code darf nur Ziffern enthalten",
       "unknown": "Unerwarteter Fehler"
     },
     "abort": {
-      "already_configured": "Diese Alarmanlage ist bereits konfiguriert"
+      "already_configured": "Diese Alarmanlage ist bereits konfiguriert",
+      "no_options": "Diese Integration hat keine konfigurierbaren Optionen"
     }
   }
 }
