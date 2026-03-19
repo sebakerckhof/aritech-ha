@@ -277,13 +277,23 @@ def create_mock_client(is_x700: bool = False) -> MagicMock:
 
 
 def create_mock_monitor() -> MagicMock:
-    """Create a mock AritechMonitor."""
+    """Create a mock AritechMonitor.
+
+    The mock monitor captures the on_initialized handler and fires it
+    automatically when start() is called, simulating what the real
+    aritech_client monitor does.
+    """
     monitor = MagicMock()
-    monitor.start = AsyncMock()
     monitor.stop = MagicMock()
 
-    # Event handler decorators
-    monitor.on_initialized = MagicMock(side_effect=lambda fn: fn)
+    # Capture the on_initialized handler so start() can fire it
+    monitor._initialized_handler = None
+
+    def capture_initialized(fn):
+        monitor._initialized_handler = fn
+        return fn
+
+    monitor.on_initialized = MagicMock(side_effect=capture_initialized)
     monitor.on_zone_changed = MagicMock(side_effect=lambda fn: fn)
     monitor.on_area_changed = MagicMock(side_effect=lambda fn: fn)
     monitor.on_output_changed = MagicMock(side_effect=lambda fn: fn)
@@ -291,6 +301,13 @@ def create_mock_monitor() -> MagicMock:
     monitor.on_door_changed = MagicMock(side_effect=lambda fn: fn)
     monitor.on_filter_changed = MagicMock(side_effect=lambda fn: fn)
     monitor.on_error = MagicMock(side_effect=lambda fn: fn)
+
+    async def mock_start():
+        """Simulate monitor start by firing the initialized callback."""
+        if monitor._initialized_handler:
+            monitor._initialized_handler(create_mock_initialized_event())
+
+    monitor.start = AsyncMock(side_effect=mock_start)
 
     return monitor
 
