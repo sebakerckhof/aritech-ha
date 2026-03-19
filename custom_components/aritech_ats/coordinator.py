@@ -80,6 +80,9 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         self._reconnect_delays: list[int] = [5, 10, 20, 40, 60, 120]
         self._max_reconnect_attempts: int = 20
 
+        # Event that is set once the on_initialized callback has fired
+        self._initialized = asyncio.Event()
+
         # Force arm state per area
         self._force_arm: dict[int, bool] = {}
 
@@ -150,7 +153,15 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
 
             self._connected = True
             self._reconnect_attempt = 0
-            _LOGGER.info("Aritech monitoring started")
+
+            _LOGGER.info("Aritech monitoring started, waiting for initialization data...")
+
+            # Wait for the on_initialized callback to fire with entity data.
+            # This ensures coordinator.data has areas/zones/etc before platforms
+            # try to create entities.
+            await asyncio.wait_for(self._initialized.wait(), timeout=INITIALIZE_TIMEOUT)
+
+            _LOGGER.info("Aritech initialization complete")
 
         except asyncio.TimeoutError as err:
             self._connected = False
@@ -275,6 +286,7 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         self._data.filter_states = event.filter_states
 
         self.async_set_updated_data(self._data)
+        self._initialized.set()
 
     @callback
     def _handle_connection_lost(self) -> None:
