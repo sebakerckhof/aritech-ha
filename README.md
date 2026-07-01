@@ -8,7 +8,7 @@ A custom Home Assistant integration for Aritech alarm panels, providing real-tim
 |--------------|--------|-------|
 | ATS x500 | Supported | Tested with x500 firmware 4.1, 4.8 and 4.11 |
 | ATS x700 (everon) |Supported | Tested with x700 firmware 4.1 |
-| ATS x000 | Beta | Only the ATSX000IP panels, not the older ones, requires a separate login |
+| ATS x000 | Beta | Only the ATSX000IP panels, not the older ones, requires a separate login. DUE TO LIMITATIONS IN THE X000 API, NOT ALL ZONES CAN BE READ |
 
 The X000 panels only allow 1 active connection per user. Therefore you'll have to create a separate user for the integration if you still want to be able to use the advisor advanced app.
 
