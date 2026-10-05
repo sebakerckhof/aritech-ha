@@ -213,6 +213,7 @@ def create_mock_client(is_x700: bool = False) -> MagicMock:
     client.connect = AsyncMock()
     client.disconnect = AsyncMock()
     client.initialize = AsyncMock()
+    client.get_description = AsyncMock(return_value={})
     client.arm_area = AsyncMock()
     client.disarm_area = AsyncMock()
     client.inhibit_zone = AsyncMock()

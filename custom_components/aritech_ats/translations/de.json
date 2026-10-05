@@ -7,11 +7,11 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "encryption_key": "Verschlüsselungsschlüssel (24 Ziffern)",
+          "encryption_key": "Verschlüsselungsschlüssel",
           "pin_code": "PIN-Code"
         },
         "data_description": {
-          "encryption_key": "Der 24-stellige Verschlüsselungsschlüssel für Ihre Alarmanlage",
+          "encryption_key": "Der Verschlüsselungsschlüssel Ihrer Alarmanlage (24, 36 oder 48 Zeichen)",
           "pin_code": "Ihr PIN-Code für die Alarmanlage"
         }
       }

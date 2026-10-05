@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -31,6 +32,9 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Key length selects AES-128/192/256 (24/36/48 characters)
+ENCRYPTION_KEY_PATTERN = re.compile(r"[0-9A-Za-z]{24}|[0-9A-Za-z]{36}|[0-9A-Za-z]{48}")
 
 # Step 1: Connection schema (host, port, encryption key)
 CONNECTION_SCHEMA = vol.Schema(
@@ -82,10 +86,10 @@ async def validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> dict
     encryption_key = data[CONF_ENCRYPTION_KEY]
 
     # Validate encryption key format
-    if not encryption_key.isdigit():
-        raise vol.Invalid("Encryption key must contain only digits")
-    if len(encryption_key) != 24:
-        raise vol.Invalid("Encryption key must be exactly 24 digits")
+    if not ENCRYPTION_KEY_PATTERN.fullmatch(encryption_key):
+        raise vol.Invalid(
+            "Encryption key must be 24, 36 or 48 letters or digits"
+        )
 
     # Connect to panel to detect type (without login)
     client = AritechClient({
@@ -182,6 +186,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
+                user_input[CONF_ENCRYPTION_KEY] = user_input[CONF_ENCRYPTION_KEY].strip()
+
                 # Validate connection and detect panel type
                 self._panel_info = await validate_connection(self.hass, user_input)
                 self._connection_data = user_input

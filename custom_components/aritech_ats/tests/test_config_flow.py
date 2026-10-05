@@ -99,21 +99,37 @@ class TestValidateConnection:
                 await validate_connection(hass, MOCK_CONNECTION_CONFIG)
 
     @pytest.mark.asyncio
-    async def test_invalid_encryption_key_not_digits(self, hass: HomeAssistant) -> None:
-        """Test validate_connection with non-digit encryption key."""
-        invalid_config = MOCK_CONNECTION_CONFIG.copy()
-        invalid_config[CONF_ENCRYPTION_KEY] = "abcdefghijklmnopqrstuvwx"
+    @pytest.mark.parametrize(
+        "key",
+        ["0123456789ABCDEFabcdef01", "0" * 36, "1A" * 24],
+    )
+    async def test_valid_encryption_key_formats(self, hass: HomeAssistant, key: str) -> None:
+        """Test validate_connection accepts 24/36/48 character alphanumeric keys."""
+        config = MOCK_CONNECTION_CONFIG.copy()
+        config[CONF_ENCRYPTION_KEY] = key
 
-        with pytest.raises(vol.Invalid, match="Encryption key must contain only digits"):
+        with patch(
+            "aritech_ats.config_flow.AritechClient",
+            return_value=create_mock_client(),
+        ):
+            await validate_connection(hass, config)
+
+    @pytest.mark.asyncio
+    async def test_invalid_encryption_key_characters(self, hass: HomeAssistant) -> None:
+        """Test validate_connection with non-alphanumeric encryption key."""
+        invalid_config = MOCK_CONNECTION_CONFIG.copy()
+        invalid_config[CONF_ENCRYPTION_KEY] = "abcdefghijklmnopqrstuvw!"
+
+        with pytest.raises(vol.Invalid, match="Encryption key must be 24, 36 or 48"):
             await validate_connection(hass, invalid_config)
 
     @pytest.mark.asyncio
     async def test_invalid_encryption_key_wrong_length(self, hass: HomeAssistant) -> None:
         """Test validate_connection with wrong length encryption key."""
         invalid_config = MOCK_CONNECTION_CONFIG.copy()
-        invalid_config[CONF_ENCRYPTION_KEY] = "123456789012"
+        invalid_config[CONF_ENCRYPTION_KEY] = "1234567890123456789012345"
 
-        with pytest.raises(vol.Invalid, match="Encryption key must be exactly 24 digits"):
+        with pytest.raises(vol.Invalid, match="Encryption key must be 24, 36 or 48"):
             await validate_connection(hass, invalid_config)
 
 

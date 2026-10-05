@@ -138,7 +138,7 @@ Enable the "Force Arm" switch for an area to arm even when zones are not ready. 
 - Check firewall settings
 
 ### Invalid authentication
-- Verify the encryption key (must be exactly 24 digits)
+- Verify the encryption key (24, 36 or 48 characters, depending on the panel's encryption level)
 - Verify the PIN code
 - Ensure the user has appropriate permissions
 

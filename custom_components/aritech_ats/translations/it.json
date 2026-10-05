@@ -7,11 +7,11 @@
         "data": {
           "host": "Host",
           "port": "Porta",
-          "encryption_key": "Chiave di crittografia (24 cifre)",
+          "encryption_key": "Chiave di crittografia",
           "pin_code": "Codice PIN"
         },
         "data_description": {
-          "encryption_key": "La chiave di crittografia a 24 cifre della tua centrale di allarme",
+          "encryption_key": "La chiave di crittografia della tua centrale di allarme (24, 36 o 48 caratteri)",
           "pin_code": "Il tuo codice PIN della centrale di allarme"
         }
       }

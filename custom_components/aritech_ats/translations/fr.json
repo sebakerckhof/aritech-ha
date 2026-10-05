@@ -7,11 +7,11 @@
         "data": {
           "host": "Hôte",
           "port": "Port",
-          "encryption_key": "Clé de chiffrement (24 chiffres)",
+          "encryption_key": "Clé de chiffrement",
           "pin_code": "Code PIN"
         },
         "data_description": {
-          "encryption_key": "La clé de chiffrement à 24 chiffres de votre centrale d'alarme",
+          "encryption_key": "La clé de chiffrement de votre centrale d'alarme (24, 36 ou 48 caractères)",
           "pin_code": "Votre code PIN de la centrale d'alarme"
         }
       }

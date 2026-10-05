@@ -7,11 +7,11 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "encryption_key": "Klucz szyfrowania (24 cyfry)",
+          "encryption_key": "Klucz szyfrowania",
           "pin_code": "Kod PIN"
         },
         "data_description": {
-          "encryption_key": "24-cyfrowy klucz szyfrowania centrali alarmowej",
+          "encryption_key": "Klucz szyfrowania centrali alarmowej (24, 36 lub 48 znaków)",
           "pin_code": "Kod PIN centrali alarmowej"
         }
       }

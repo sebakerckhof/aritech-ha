@@ -7,10 +7,10 @@
         "data": {
           "host": "Host",
           "port": "Port",
-          "encryption_key": "Encryption Key (24 digits)"
+          "encryption_key": "Encryption Key"
         },
         "data_description": {
-          "encryption_key": "The 24-digit encryption key for your alarm panel"
+          "encryption_key": "The encryption key of your alarm panel (24, 36 or 48 characters)"
         }
       },
       "x500_auth": {

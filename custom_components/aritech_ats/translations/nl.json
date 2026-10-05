@@ -7,11 +7,11 @@
         "data": {
           "host": "Host",
           "port": "Poort",
-          "encryption_key": "Encryptiesleutel (24 cijfers)",
+          "encryption_key": "Encryptiesleutel",
           "pin_code": "PIN-code"
         },
         "data_description": {
-          "encryption_key": "De 24-cijferige encryptiesleutel van uw alarmcentrale",
+          "encryption_key": "De encryptiesleutel van uw alarmcentrale (24, 36 of 48 tekens)",
           "pin_code": "Uw PIN-code van de alarmcentrale"
         }
       }
