@@ -26,7 +26,7 @@ def _get_zone_device_info(
         name=zone_name,
         manufacturer=MANUFACTURER,
         model="Zone",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
+        **coordinator.via_panel_device(),
     )
 
 
@@ -50,7 +50,7 @@ def _get_area_device_info(
         name=area_name,
         manufacturer=MANUFACTURER,
         model="Area",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
+        **coordinator.via_panel_device(),
     )
 
 
@@ -63,7 +63,7 @@ def _get_door_device_info(
         name=door_name,
         manufacturer=MANUFACTURER,
         model="Door",
-        via_device=(DOMAIN, coordinator.config_entry.entry_id),
+        **coordinator.via_panel_device(),
     )
 
 

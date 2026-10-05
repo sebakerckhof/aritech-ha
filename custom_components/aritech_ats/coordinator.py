@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from aritech_client import AritechClient, AritechMonitor, ChangeEvent, InitializedEvent
@@ -24,6 +25,9 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# HA 2026.8+ links devices by registry id (via_device_id); via_device is deprecated
+_SUPPORTS_VIA_DEVICE_ID = "via_device_id" in DeviceInfo.__annotations__
 
 
 @dataclass
@@ -72,6 +76,7 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
         self._data = AritechData()
         self._connected = False
         self._reconnect_task: asyncio.Task | None = None
+        self.panel_device_id: str | None = None
 
         # Reconnection backoff settings
         self._reconnect_attempt: int = 0
@@ -98,6 +103,12 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
     def connected(self) -> bool:
         """Return connection status."""
         return self._connected
+
+    def via_panel_device(self) -> dict[str, Any]:
+        """Return DeviceInfo kwargs linking a child device to the panel device."""
+        if _SUPPORTS_VIA_DEVICE_ID:
+            return {"via_device_id": self.panel_device_id}
+        return {"via_device": (DOMAIN, self.config_entry.entry_id)}
 
     @property
     def panel_model(self) -> str | None:

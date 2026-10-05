@@ -7,9 +7,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 
-from .const import DOMAIN, CONF_PANEL_TYPE, PANEL_TYPE_X500
+from .const import DOMAIN, MANUFACTURER, CONF_PANEL_TYPE, PANEL_TYPE_X500
 from .coordinator import AritechCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,6 +61,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as err:
         _LOGGER.error("Failed to connect to Aritech panel: %s", err)
         raise ConfigEntryNotReady(f"Failed to connect: {err}") from err
+
+    # Register the panel device up front so child devices can link to it by id
+    panel_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=coordinator.panel_name or "Aritech Panel",
+        manufacturer=MANUFACTURER,
+        model=coordinator.panel_model or "ATS Panel",
+        sw_version=coordinator.firmware_version,
+    )
+    coordinator.panel_device_id = panel_device.id
 
     # Store coordinator in hass.data
     hass.data.setdefault(DOMAIN, {})

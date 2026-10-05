@@ -110,7 +110,7 @@ class AritechAlarmControlPanel(AlarmControlPanelEntity):
             name=area_name,
             manufacturer=MANUFACTURER,
             model="Area",
-            via_device=(DOMAIN, coordinator.config_entry.entry_id),
+            **coordinator.via_panel_device(),
         )
 
     async def async_added_to_hass(self) -> None:
