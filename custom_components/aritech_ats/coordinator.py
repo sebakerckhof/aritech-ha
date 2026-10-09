@@ -488,6 +488,9 @@ class AritechCoordinator(DataUpdateCoordinator[AritechData]):
                         self._max_reconnect_attempts,
                         self._reconnect_delays[-1],
                     )
+                # This task is still running, so _schedule_reconnect() would see it
+                # as "already scheduled" and never retry. Release it first.
+                self._reconnect_task = None
                 self._schedule_reconnect()
 
         self._reconnect_task = self.hass.async_create_task(reconnect())

@@ -501,3 +501,31 @@ async def test_coordinator_deactivate_trigger(hass: HomeAssistant) -> None:
 
         await coordinator.async_deactivate_trigger(1)
         mock_client.deactivate_trigger.assert_called_once_with(1)
+
+
+async def test_coordinator_reconnect_keeps_retrying_after_failure(hass: HomeAssistant) -> None:
+    """A failed reconnect must schedule another attempt instead of giving up."""
+    entry = create_mock_config_entry(hass)
+    coordinator = AritechCoordinator(hass, entry)
+    coordinator._reconnect_delays = [0]
+    attempts = 0
+
+    async def failing_connect() -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts >= 3:
+            return  # third attempt succeeds
+        raise ConnectionError("panel unreachable")
+
+    with (
+        patch.object(coordinator, "async_connect", side_effect=failing_connect),
+        patch.object(coordinator, "async_disconnect", AsyncMock()),
+    ):
+        coordinator._schedule_reconnect()
+        for _ in range(20):
+            await hass.async_block_till_done()
+            if attempts >= 3:
+                break
+
+    assert attempts == 3
+    assert coordinator._reconnect_attempt == 0
