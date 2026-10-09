@@ -152,7 +152,7 @@ For issues and feature requests, please open an issue on GitHub.
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the AGPL-3.0 license.
 
 ## Disclaimer
 
